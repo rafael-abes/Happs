@@ -7,14 +7,22 @@
 
 import SwiftUI
 import FirebaseCore
+import FirebaseAuth
+
+
 
 struct ContentView: View {
+    @AppStorage("prefersDarkMode") private var prefersDarkMode = false
+    
     var body: some View {
-        if FirebaseApp.app() == nil {
-            FirebaseSetupView()
-        } else {
-            AuthenticatedRootView()
+        Group {
+            if FirebaseApp.app() == nil {
+                FirebaseSetupView()
+            } else {
+                AuthenticatedRootView()
+            }
         }
+        .preferredColorScheme(prefersDarkMode ? .dark : .light)
     }
 }
 
@@ -29,7 +37,7 @@ private struct AuthenticatedRootView: View {
             } else if authService.user == nil {
                 AuthenticationView()
             } else {
-                HappsListView()
+                MainTabView()
             }
         }
         .environmentObject(authService)

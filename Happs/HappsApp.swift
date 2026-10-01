@@ -6,6 +6,8 @@
 //
 import SwiftUI
 import FirebaseCore
+import FirebaseAuth
+import GoogleSignIn
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
@@ -15,7 +17,40 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
             FirebaseApp.configure()
         }
+        
+        #if DEBUG
+        Auth.auth().settings?.isAppVerificationDisabledForTesting = true
+        #endif
+        
+        application.registerForRemoteNotifications()
         return true
+    }
+    
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        GIDSignIn.sharedInstance.handle(url)
+    }
+    
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        Auth.auth().setAPNSToken(deviceToken, type: .unknown)
+    }
+    
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification notification: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        if Auth.auth().canHandleNotification(notification) {
+            completionHandler(.noData)
+            return
+        }
+        completionHandler(.newData)
     }
 }
 

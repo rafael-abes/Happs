@@ -5,6 +5,7 @@
 //  Created by Rafa Abes on 9/21/26.
 //
 import SwiftUI
+import FirebaseAuth
 
 struct HappDetailView: View {
     @EnvironmentObject private var authService: AuthService

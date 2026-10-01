@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		96A9DDAE306E594E00B2A39D /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 96A9DDAD306E594E00B2A39D /* GoogleSignIn */; };
+		96A9DDB0306E594E00B2A39D /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 96A9DDAF306E594E00B2A39D /* GoogleSignInSwift */; };
 		96BC734A3052E12E003B7FD1 /* FirebaseAI in Frameworks */ = {isa = PBXBuildFile; productRef = 96BC73493052E12E003B7FD1 /* FirebaseAI */; };
 		96BC734C3052E12E003B7FD1 /* FirebaseAILogic in Frameworks */ = {isa = PBXBuildFile; productRef = 96BC734B3052E12E003B7FD1 /* FirebaseAILogic */; };
 		96BC734E3052E12E003B7FD1 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = 96BC734D3052E12E003B7FD1 /* FirebaseAppCheck */; };
@@ -42,9 +44,22 @@
 		96BC73593052EA34003B7FD1 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		96A9DDB2306E5A0600B2A39D /* Exceptions for "Happs" folder in "Happs" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 96BC73113052DA04003B7FD1 /* Happs */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		96BC73143052DA04003B7FD1 /* Happs */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				96A9DDB2306E5A0600B2A39D /* Exceptions for "Happs" folder in "Happs" target */,
+			);
 			path = Happs;
 			sourceTree = "<group>";
 		};
@@ -70,9 +85,11 @@
 				96BC73563052E12E003B7FD1 /* FirebaseMessaging in Frameworks */,
 				96BC73523052E12E003B7FD1 /* FirebaseCrashlytics in Frameworks */,
 				96BC734A3052E12E003B7FD1 /* FirebaseAI in Frameworks */,
+				96A9DDB0306E594E00B2A39D /* GoogleSignInSwift in Frameworks */,
 				96BC73583052E12E003B7FD1 /* FirebaseStorage in Frameworks */,
 				96BC73503052E12E003B7FD1 /* FirebaseAuth in Frameworks */,
 				96BC73543052E12E003B7FD1 /* FirebaseFirestore in Frameworks */,
+				96A9DDAE306E594E00B2A39D /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -142,6 +159,8 @@
 				96BC73533052E12E003B7FD1 /* FirebaseFirestore */,
 				96BC73553052E12E003B7FD1 /* FirebaseMessaging */,
 				96BC73573052E12E003B7FD1 /* FirebaseStorage */,
+				96A9DDAD306E594E00B2A39D /* GoogleSignIn */,
+				96A9DDAF306E594E00B2A39D /* GoogleSignInSwift */,
 			);
 			productName = Happs;
 			productReference = 96BC73123052DA04003B7FD1 /* Happs.app */;
@@ -227,6 +246,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				96BC73483052E12E003B7FD1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				96A9DDAC306E594E00B2A39D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 96BC73133052DA04003B7FD1 /* Products */;
@@ -427,10 +447,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Happs/Happs.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Happs/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -458,10 +480,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Happs/Happs.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Happs/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -606,6 +630,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		96A9DDAC306E594E00B2A39D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 10.0.0;
+			};
+		};
 		96BC73483052E12E003B7FD1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
@@ -617,6 +649,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		96A9DDAD306E594E00B2A39D /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 96A9DDAC306E594E00B2A39D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		96A9DDAF306E594E00B2A39D /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 96A9DDAC306E594E00B2A39D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
+		};
 		96BC73493052E12E003B7FD1 /* FirebaseAI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 96BC73483052E12E003B7FD1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

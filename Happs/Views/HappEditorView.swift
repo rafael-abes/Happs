@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import FirebaseAuth
 
 struct HappEditorView: View {
     @EnvironmentObject private var authService: AuthService
