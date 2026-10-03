@@ -67,7 +67,9 @@ final class AuthService: ObservableObject {
         
         do {
             try await database.collection("users").document(profile.id).setData(profile.creationData)
+            try await writeSearchIndex(userID: profile.id, displayName: cleanedName)
         } catch {
+            try? await database.collection("users").document(profile.id).delete()
             try? await result.user.delete()
             throw error
         }
@@ -135,6 +137,18 @@ final class AuthService: ObservableObject {
         try await ensureProfileExists(for: authResult.user, fallbackDisplayName: result.user.profile?.name ?? "")
     }
     
+    func updateDisplayName(_ name: String) async throws {
+        guard let user = auth.currentUser else {
+            throw AppError.invalidForm("You're not signed in.")
+        }
+        let request = user.createProfileChangeRequest()
+        request.displayName = name
+        try await request.commitChanges()
+        try await database.collection("users").document(user.uid).updateData(["displayName": name])
+        
+        try await database.collection(UserSearchEntry.collectionName).document(user.uid).updateData(["displayName": name])
+    }
+    
     private static func topViewController() -> UIViewController? {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
@@ -160,9 +174,16 @@ final class AuthService: ObservableObject {
             phoneNumber: user.phoneNumber
         )
         try await reference.setData(profile.creationData)
+        try await writeSearchIndex(userID: user.uid, displayName: profile.displayName)
     }
     
     func signOut() throws {
         try auth.signOut()
+    }
+    
+    private func writeSearchIndex(userID: String, displayName: String) async throws {
+        try await database.collection(UserSearchEntry.collectionName).document(userID).setData([
+            "displayName": displayName
+        ])
     }
 }

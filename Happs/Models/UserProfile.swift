@@ -8,10 +8,17 @@ import Foundation
 import FirebaseFirestore
 
 enum UserStatus: String, Codable, CaseIterable, Identifiable {
-    case free = "Free"
+    case available = "Available"
     case inClass = "In Class"
     case busy = "Busy"
+    case doNotDisturb = "Do Not Disturb"
     var id: String { rawValue }
+}
+
+struct UserLocation: Codable {
+    let latitude: Double
+    let longitude: Double
+    @ServerTimestamp var updatedAt: Date?
 }
 
 struct UserProfile: Codable, Identifiable {
@@ -22,11 +29,12 @@ struct UserProfile: Codable, Identifiable {
     var status: UserStatus
     var isVisible: Bool
     var friendIDs: [String]
+    var location: UserLocation?
     @ServerTimestamp var statusUpdatedAt: Date?
     
     var id: String { documentID ?? "" }
     
-    init(id: String, displayName: String, email: String, phoneNumber: String? = nil, status: UserStatus = .free, isVisible: Bool = true, friendIDs: [String] = []) {
+    init(id: String, displayName: String, email: String, phoneNumber: String? = nil, status: UserStatus = .available, isVisible: Bool = true, friendIDs: [String] = []) {
         self.documentID = id
         self.displayName = displayName
         self.email = email
@@ -34,6 +42,7 @@ struct UserProfile: Codable, Identifiable {
         self.status = status
         self.isVisible = isVisible
         self.friendIDs = friendIDs
+        self.location = nil
         self.statusUpdatedAt = nil
     }
     

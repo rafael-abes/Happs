@@ -47,8 +47,7 @@ final class FriendStore: ObservableObject {
             }
     }
     
-    /// Firestore's `in` queries cap at 10 values, so friendIDs are chunked into
-    /// groups of 10, each with its own listener.
+
     private func listenToFriends(ids: [String]) {
         friendsListeners.forEach { $0.remove() }
         friendsListeners = []
@@ -82,13 +81,11 @@ final class FriendStore: ObservableObject {
         incomingRequests = []
     }
     
-    /// Prefix match on displayName — Firestore has no native text search, so this
-    /// won't catch mid-string matches. Fine for an MVP, worth revisiting later.
-    func searchUsers(matching query: String, excluding currentUserID: String) async throws -> [UserProfile] {
+    func searchUsers(matching query: String, excluding currentUserID: String) async throws -> [UserSearchEntry] {
         let cleaned = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return [] }
         
-        let snapshot = try await database.collection("users")
+        let snapshot = try await database.collection(UserSearchEntry.collectionName)
             .order(by: "displayName")
             .start(at: [cleaned])
             .end(at: [cleaned + "\u{f8ff}"])
@@ -96,7 +93,7 @@ final class FriendStore: ObservableObject {
             .getDocuments()
         
         return snapshot.documents
-            .compactMap { try? $0.data(as: UserProfile.self) }
+            .compactMap { try? $0.data(as: UserSearchEntry.self) }
             .filter { $0.id != currentUserID }
     }
     

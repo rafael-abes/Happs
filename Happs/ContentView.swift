@@ -29,6 +29,9 @@ struct ContentView: View {
 private struct AuthenticatedRootView: View {
     @StateObject private var authService = AuthService()
     @StateObject private var happStore = HappStore()
+    @StateObject private var friendStore = FriendStore()
+    @StateObject private var profileStore = ProfileStore()
+    @StateObject private var locationService = LocationService()
     
     var body: some View {
         Group {
@@ -42,12 +45,25 @@ private struct AuthenticatedRootView: View {
         }
         .environmentObject(authService)
         .environmentObject(happStore)
+        .environmentObject(friendStore)
+        .environmentObject(profileStore)
+        .environmentObject(locationService)
         .onChange(of: authService.user?.uid, initial: true) { _, userID in
-            if userID == nil {
-                happStore.stopListening()
-            } else {
+            if let userID {
                 happStore.startListening()
+                friendStore.startListening(for: userID)
+                profileStore.startListening(userID: userID)
+//                locationService.requestPermission()
+//                locationService.startSharing(userID: userID)
+            } else {
+                happStore.stopListening()
+                friendStore.stopListening()
+                profileStore.stopListening()
+                locationService.stopSharing()
             }
+        }
+        .onChange(of: profileStore.profile?.isVisible) { _, isVisible in
+            locationService.isInvisible = (isVisible == false)
         }
     }
 }

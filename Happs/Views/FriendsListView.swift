@@ -71,15 +71,7 @@ struct FriendsListView: View {
         } else {
             Label(friend.status.rawValue, systemImage: "circle.fill")
                 .font(.caption)
-                .foregroundStyle(statusColor(friend.status))
-        }
-    }
-    
-    private func statusColor(_ status: UserStatus) -> Color {
-        switch status {
-        case .free: .green
-        case .inClass: .orange
-        case .busy: .red
+                .foregroundStyle(friend.status.color)
         }
     }
     
