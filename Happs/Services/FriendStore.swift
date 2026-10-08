@@ -12,6 +12,7 @@ import Combine
 @MainActor
 final class FriendStore: ObservableObject {
     @Published private(set) var friends: [UserProfile] = []
+    @Published private(set) var friendLocations: [String: LiveLocation] = [:]
     @Published private(set) var incomingRequests: [FriendRequest] = []
     @Published private(set) var errorMessage: String?
     
@@ -19,6 +20,7 @@ final class FriendStore: ObservableObject {
     private var incomingListener: ListenerRegistration?
     private var profileListener: ListenerRegistration?
     private var friendsListeners: [ListenerRegistration] = []
+    private var locationListeners: [ListenerRegistration] = []
     
     init(database: Firestore = .firestore()) {
         self.database = database
@@ -43,6 +45,7 @@ final class FriendStore: ObservableObject {
                 Task { @MainActor in
                     guard let self, let profile = try? snapshot?.data(as: UserProfile.self) else { return }
                     self.listenToFriends(ids: profile.friendIDs)
+                    self.listenToLocations(ids: profile.friendIDs)
                 }
             }
     }
@@ -73,10 +76,42 @@ final class FriendStore: ObservableObject {
         }
     }
     
+    private func listenToLocations(ids: [String]) {
+        locationListeners.forEach { $0.remove() }
+        locationListeners = []
+        guard !ids.isEmpty else { friendLocations = [:]; return }
+        
+        let chunks = stride(from: 0, to: ids.count, by: 10).map { Array(ids[$0..<min($0 + 10, ids.count)]) }
+        for chunk in chunks {
+            let listener = database.collection("liveLocations")
+                .whereField(FieldPath.documentID(), in: chunk)
+                .addSnapshotListener { [weak self] snapshot, _ in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        let documents = snapshot?.documents ?? []
+                        for doc in documents {
+                            if let location = try? doc.data(as: LiveLocation.self) {
+                                self.friendLocations[location.id] = location
+                            }
+                        }
+                        // A friend whose doc is no longer returned here is either off
+                        // campus, invisible, or unfriended, the rule silently filters
+                        // them out rather than erroring, so we clear them locally too.
+                        let present = Set(documents.map { $0.documentID })
+                        for id in chunk where !present.contains(id) {
+                            self.friendLocations.removeValue(forKey: id)
+                        }
+                    }
+                }
+            locationListeners.append(listener)
+        }
+    }
+    
     func stopListening() {
         incomingListener?.remove(); incomingListener = nil
         profileListener?.remove(); profileListener = nil
         friendsListeners.forEach { $0.remove() }; friendsListeners = []
+        locationListeners.forEach { $0.remove() }; locationListeners = []
         friends = []
         incomingRequests = []
     }
