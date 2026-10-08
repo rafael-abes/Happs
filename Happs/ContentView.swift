@@ -53,17 +53,14 @@ private struct AuthenticatedRootView: View {
                 happStore.startListening()
                 friendStore.startListening(for: userID)
                 profileStore.startListening(userID: userID)
-//                locationService.requestPermission()
-//                locationService.startSharing(userID: userID)
+                locationService.requestPermission()
+                locationService.startSharing(userID: userID)
             } else {
                 happStore.stopListening()
                 friendStore.stopListening()
                 profileStore.stopListening()
                 locationService.stopSharing()
             }
-        }
-        .onChange(of: profileStore.profile?.isVisible) { _, isVisible in
-            locationService.isInvisible = (isVisible == false)
         }
     }
 }

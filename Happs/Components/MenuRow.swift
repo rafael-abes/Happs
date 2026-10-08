@@ -11,12 +11,14 @@ struct MenuRow: View {
     let title: String
     var action: () -> Void = {}
     
+    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 28
+    
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .medium))
-                    .frame(width: 28, height: 28)
+                    .font(.callout.weight(.medium))
+                    .frame(width: iconSize, height: iconSize)
                     .background(.quaternary, in: Circle())
                 
                 Text(title)

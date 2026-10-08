@@ -4,7 +4,6 @@
 //
 //  Created by Rafa Abes on 10/2/26.
 //
-
 import Foundation
 import CoreLocation
 import FirebaseFirestore
@@ -14,14 +13,13 @@ import Combine
 final class LocationService: NSObject, ObservableObject {
     @Published private(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published private(set) var isInsideCampus = false
-    
-    var isInvisible = false
+    @Published private(set) var currentCoordinate: CLLocationCoordinate2D?
     
     private let manager = CLLocationManager()
     private let database = Firestore.firestore()
     private var currentUserID: String?
     
-    private static let campusBoundary: [CLLocationCoordinate2D] = [
+    static let campusBoundary: [CLLocationCoordinate2D] = [
         CLLocationCoordinate2D(latitude: -37.90777268374264, longitude: 145.13021258121205),
         CLLocationCoordinate2D(latitude: -37.90830783929267, longitude: 145.1366105888795),
         CLLocationCoordinate2D(latitude: -37.91522197879005, longitude: 145.1341950163024),
@@ -32,55 +30,41 @@ final class LocationService: NSObject, ObservableObject {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-        manager.distanceFilter = 15 // throttle writes to roughly every 15m of movement
+        manager.distanceFilter = 15
     }
     
-    func requestPermission() {
-        manager.requestWhenInUseAuthorization()
-    }
+    func requestPermission() { manager.requestWhenInUseAuthorization() }
+    func startSharing(userID: String) { currentUserID = userID; manager.startUpdatingLocation() }
+    func stopSharing() { currentUserID = nil; manager.stopUpdatingLocation() }
     
-    func startSharing(userID: String) {
-        currentUserID = userID
-        manager.startUpdatingLocation()
-    }
-    
-    func stopSharing() {
-        currentUserID = nil
-        manager.stopUpdatingLocation()
-    }
-    
+    /// Writes continuously while on campus, regardless of visibility. Whether a
+    /// friend can actually *read* this document is now entirely a Firestore
+    /// rules decision (see liveLocations rule), not a client-side one, this is
+    /// what makes it an actual security boundary rather than good-faith behavior.
     private func handle(_ coordinate: CLLocationCoordinate2D) {
+        currentCoordinate = coordinate
         isInsideCampus = Self.isInside(coordinate, polygon: Self.campusBoundary)
         guard let userID = currentUserID else { return }
         
-        if isInvisible || !isInsideCampus {
-            removeLocation(userID: userID)
-        } else {
+        if isInsideCampus {
             publishLocation(coordinate, userID: userID)
+        } else {
+            removeLocation(userID: userID)
         }
     }
     
-    /// Replaces only the `location` field on the document, nothing else on the
-    /// profile is touched by this write.
     private func publishLocation(_ coordinate: CLLocationCoordinate2D, userID: String) {
-        try? database.collection("users").document(userID).updateData([
-            "location": [
-                "latitude": coordinate.latitude,
-                "longitude": coordinate.longitude,
-                "updatedAt": FieldValue.serverTimestamp()
-            ]
+        try? database.collection("liveLocations").document(userID).setData([
+            "latitude": coordinate.latitude,
+            "longitude": coordinate.longitude,
+            "updatedAt": FieldValue.serverTimestamp()
         ])
     }
     
-    /// Deleting the field entirely, not just hiding it client-side, is the actual
-    /// privacy mechanism: a friend with no `location` field simply has nothing to read.
     private func removeLocation(userID: String) {
-        try? database.collection("users").document(userID).updateData([
-            "location": FieldValue.delete()
-        ])
+        try? database.collection("liveLocations").document(userID).delete()
     }
     
-    /// Ray-casting point-in-polygon test, sufficient for this fixed four-point boundary.
     private static func isInside(_ point: CLLocationCoordinate2D, polygon: [CLLocationCoordinate2D]) -> Bool {
         var isInside = false
         var j = polygon.count - 1
@@ -102,7 +86,6 @@ extension LocationService: CLLocationManagerDelegate {
         guard let coordinate = locations.last?.coordinate else { return }
         Task { @MainActor in self.handle(coordinate) }
     }
-    
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in self.authorizationStatus = manager.authorizationStatus }
     }

@@ -20,13 +20,15 @@ struct Happ: Codable, Identifiable {
     let creatorID: String
     let creatorName: String
     let startTime: Date
+    let latitude: Double?
+    let longitude: Double?
     @ServerTimestamp var createdAt: Date?
     
     var id: String {
         documentID ?? ""
     }
     
-    init(title: String, details: String, location: String, category: HappCategory, participantIDs: [String], creatorID: String, creatorName: String, startTime: Date) {
+    init(title: String, details: String, location: String, category: HappCategory, participantIDs: [String], creatorID: String, creatorName: String, startTime: Date, latitude: Double? = nil, longitude: Double? = nil) {
         self.title = title
         self.details = details
         self.location = location
@@ -35,6 +37,8 @@ struct Happ: Codable, Identifiable {
         self.creatorID = creatorID
         self.creatorName = creatorName
         self.startTime = startTime
+        self.latitude = latitude
+        self.longitude = longitude
         createdAt = nil
     }
     
