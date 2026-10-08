@@ -11,6 +11,8 @@ struct ProfileView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var profileStore: ProfileStore
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
+    @ScaledMetric(relativeTo: .largeTitle) private var avatarSize: CGFloat = 80
+    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 28
     @State private var isPresentingEditor = false
     @State private var errorMessage: String?
     
@@ -20,6 +22,7 @@ struct ProfileView: View {
                 VStack(spacing: 20) {
 
                     header
+                    
 
                     invisibleModeCard
 
@@ -62,7 +65,7 @@ struct ProfileView: View {
     private var header: some View {
         VStack(spacing: 6) {
             Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 80)).foregroundStyle(.secondary)
+                .font(.system(size: avatarSize))
             Text(authService.user?.displayName ?? "Happs User").font(.title2.bold())
             
             Menu {
@@ -96,8 +99,9 @@ struct ProfileView: View {
     private var appearanceCard: some View {
         HStack(spacing: 14) {
             Image(systemName: prefersDarkMode ? "moon.fill" : "sun.max.fill")
-                .font(.system(size: 16, weight: .medium))
-                .frame(width: 28, height: 28).background(.quaternary, in: Circle())
+                .font(.callout.weight(.medium))
+                .frame(width: iconSize, height: iconSize)
+                .background(.quaternary, in: Circle())
             Text("Dark Mode")
             Spacer()
             Toggle("", isOn: $prefersDarkMode).labelsHidden()

@@ -16,14 +16,7 @@ struct FriendsListView: View {
                 if !friendStore.incomingRequests.isEmpty {
                     Section("Requests") {
                         ForEach(friendStore.incomingRequests) { request in
-                            HStack {
-                                Text(request.fromDisplayName)
-                                Spacer()
-                                Button("Accept") { respond(request, accept: true) }
-                                    .buttonStyle(.borderedProminent).tint(.green)
-                                Button("Decline") { respond(request, accept: false) }
-                                    .buttonStyle(.bordered)
-                            }
+                            requestRow(request)
                         }
                     }
                 }
@@ -72,6 +65,31 @@ struct FriendsListView: View {
             Label(friend.status.rawValue, systemImage: "circle.fill")
                 .font(.caption)
                 .foregroundStyle(friend.status.color)
+        }
+    }
+    
+    @ViewBuilder
+    private func requestRow(_ request: FriendRequest) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                Text(request.fromDisplayName)
+                Spacer()
+                requestButtons(request)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text(request.fromDisplayName)
+                requestButtons(request)
+            }
+        }
+    }
+    
+    private func requestButtons(_ request: FriendRequest) -> some View {
+        HStack {
+            Button("Accept") { respond(request, accept: true) }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+            Button("Decline") { respond(request, accept: false) }
+                .buttonStyle(.bordered)
         }
     }
     

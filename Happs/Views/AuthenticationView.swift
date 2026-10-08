@@ -25,6 +25,7 @@ struct AuthenticationView: View {
     }
     
     @EnvironmentObject private var authService: AuthService
+    @ScaledMetric(relativeTo: .largeTitle) private var logoSize: CGFloat = 54
     @State private var method = Method.email
     
     // Email state
@@ -76,7 +77,7 @@ struct AuthenticationView: View {
     private var header: some View {
         VStack(spacing: 6) {
             Image(systemName: "figure.socialdance")
-                .font(.system(size: 54))
+                .font(.system(size: logoSize))
                 .foregroundStyle(.tint)
             Text("Hello")
                 .font(.largeTitle.bold())

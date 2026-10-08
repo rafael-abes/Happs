@@ -4,8 +4,8 @@
 //
 //  Created by Rafa Abes on 9/21/26.
 //
-
 import SwiftUI
+import CoreLocation
 import FirebaseAuth
 
 struct HappEditorView: View {
@@ -16,9 +16,11 @@ struct HappEditorView: View {
     @State private var title = ""
     @State private var details = ""
     @State private var location = ""
+    @State private var selectedCoordinate: CLLocationCoordinate2D?
     @State private var category = HappCategory.happs
     @State private var startTime = Date()
     @State private var isCreating = false
+    @State private var isPresentingLocationPicker = false
     @State private var errorMessage: String?
     
     var body: some View {
@@ -28,7 +30,17 @@ struct HappEditorView: View {
             }
             
             Section("Location") {
-                TextField("Add location", text: $location)
+                Button {
+                    isPresentingLocationPicker = true
+                } label: {
+                    HStack {
+                        Text(location.isEmpty ? "Add Location" : location)
+                            .foregroundStyle(location.isEmpty ? .secondary : .primary)
+                        Spacer()
+                        Image(systemName: "mappin.and.ellipse")
+                    }
+                }
+                .buttonStyle(.plain)
             }
             
             Section("When") {
@@ -60,6 +72,9 @@ struct HappEditorView: View {
             }
         }
         .interactiveDismissDisabled(isCreating)
+        .sheet(isPresented: $isPresentingLocationPicker) {
+            LocationPickerView(category: category, selectedName: $location, selectedCoordinate: $selectedCoordinate)
+        }
         .alert("Cannot Create Happ", isPresented: errorIsPresented) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
@@ -87,8 +102,10 @@ struct HappEditorView: View {
                     location: location,
                     category: category,
                     startTime: startTime,
+                    latitude: selectedCoordinate?.latitude,
+                    longitude: selectedCoordinate?.longitude,
                     creatorID: user.uid,
-                    creatorName: user.displayName ?? user.email ?? "Someone"
+                    creatorName: user.displayName ?? user.email ?? "Someone",
                 )
                 dismiss()
             } catch {
