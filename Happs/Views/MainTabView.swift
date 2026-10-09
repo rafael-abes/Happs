@@ -7,6 +7,7 @@
 import SwiftUI
 
 struct MainTabView: View {
+    @AppStorage("prefersDarkMode") private var prefersDarkMode = false
 
     private enum Tab {
         case friends, happs, me
@@ -43,7 +44,7 @@ struct MainTabView: View {
             // MARK: Friends
             tabButton(
                 .friends,
-                imageName: "friendsLogo",
+                imageName: prefersDarkMode ? "friendsLogoLight" : "friendsLogo",
                 label: "Friends"
             )
 
@@ -61,7 +62,7 @@ struct MainTabView: View {
             // MARK: Me
             tabButton(
                 .me,
-                imageName: "meLogo",
+                imageName: prefersDarkMode ? "meLogoLight" : "meLogo",
                 label: "Me"
             )
         }

@@ -37,6 +37,7 @@ struct ProfileView: View {
                         MenuRow(systemImage: "calendar", title: "Schedule")
                         MenuRow(systemImage: "square.and.pencil", title: "Preferences")
                         MenuRow(systemImage: "line.3.horizontal", title: "Settings")
+                        MenuRow(systemImage: "info.circle.fill", title: "About Happs")
                     }
 
                     Button(role: .destructive, action: signOut) {
