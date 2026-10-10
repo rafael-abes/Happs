@@ -56,7 +56,18 @@ final class HappStore: ObservableObject {
         errorMessage = nil
     }
     
-    func createHapp(title: String, details: String, location: String, category: HappCategory, startTime: Date, latitude: Double? = nil, longitude: Double? = nil, creatorID: String, creatorName: String) async throws {
+    func createHapp(
+        title: String,
+        details: String,
+        location: String,
+        category: HappCategory,
+        startTime: Date,
+        creatorID: String,
+        creatorName: String,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        invitedIDs: [String] = []
+    ) async throws {
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedLocation = location.trimmingCharacters(in: .whitespacesAndNewlines)
         
@@ -80,7 +91,8 @@ final class HappStore: ObservableObject {
             creatorName: creatorName,
             startTime: startTime,
             latitude: latitude,
-            longitude: longitude
+            longitude: longitude,
+            invitedIDs: invitedIDs.isEmpty ? nil : invitedIDs
         )
         
         let data = try Firestore.Encoder().encode(happ)
