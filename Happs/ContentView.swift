@@ -32,6 +32,7 @@ private struct AuthenticatedRootView: View {
     @StateObject private var friendStore = FriendStore()
     @StateObject private var profileStore = ProfileStore()
     @StateObject private var locationService = LocationService()
+    @StateObject private var groupStore = GroupStore()
     
     var body: some View {
         Group {
@@ -48,23 +49,25 @@ private struct AuthenticatedRootView: View {
         .environmentObject(friendStore)
         .environmentObject(profileStore)
         .environmentObject(locationService)
+        .environmentObject(groupStore)
         .onChange(of: authService.user?.uid, initial: true) { _, userID in
             if let userID {
                 happStore.startListening()
                 friendStore.startListening(for: userID)
                 profileStore.startListening(userID: userID)
+                groupStore.startListening(for: userID)
                 locationService.requestPermission()
                 locationService.startSharing(userID: userID)
             } else {
                 happStore.stopListening()
                 friendStore.stopListening()
                 profileStore.stopListening()
+                groupStore.stopListening()
                 locationService.stopSharing()
             }
         }
     }
 }
-
 private struct FirebaseSetupView: View {
     var body: some View {
         ContentUnavailableView {

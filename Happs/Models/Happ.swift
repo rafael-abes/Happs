@@ -5,7 +5,7 @@
 //  Created by Rafa Abes on 9/21/26.
 //
 
-import Foundation 
+import Foundation
 import FirebaseFirestore
 
 struct Happ: Codable, Identifiable {
@@ -17,6 +17,7 @@ struct Happ: Codable, Identifiable {
     let location: String
     let category: HappCategory
     var participantIDs: [String]
+    var invitedIDs: [String]?
     let creatorID: String
     let creatorName: String
     let startTime: Date
@@ -24,11 +25,21 @@ struct Happ: Codable, Identifiable {
     let longitude: Double?
     @ServerTimestamp var createdAt: Date?
     
-    var id: String {
-        documentID ?? ""
-    }
+    var id: String { documentID ?? "" }
     
-    init(title: String, details: String, location: String, category: HappCategory, participantIDs: [String], creatorID: String, creatorName: String, startTime: Date, latitude: Double? = nil, longitude: Double? = nil) {
+    init(
+        title: String,
+        details: String,
+        location: String,
+        category: HappCategory,
+        participantIDs: [String],
+        creatorID: String,
+        creatorName: String,
+        startTime: Date,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        invitedIDs: [String]? = nil
+    ) {
         self.title = title
         self.details = details
         self.location = location
@@ -39,11 +50,16 @@ struct Happ: Codable, Identifiable {
         self.startTime = startTime
         self.latitude = latitude
         self.longitude = longitude
-        createdAt = nil
+        self.invitedIDs = invitedIDs
+        self.createdAt = nil
     }
     
     func containsParticipant(_ userID: String) -> Bool {
         participantIDs.contains(userID)
+    }
+    
+    func isInvited(_ userID: String) -> Bool {
+        (invitedIDs ?? []).contains(userID)
     }
 }
 

@@ -11,6 +11,7 @@ import FirebaseAuth
 struct HappEditorView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
+    @EnvironmentObject private var groupStore: GroupStore
     @Environment(\.dismiss) private var dismiss
     
     @State private var title = ""
@@ -19,6 +20,7 @@ struct HappEditorView: View {
     @State private var selectedCoordinate: CLLocationCoordinate2D?
     @State private var category = HappCategory.happs
     @State private var startTime = Date()
+    @State private var invitedGroupIDs: Set<String> = []
     @State private var isCreating = false
     @State private var isPresentingLocationPicker = false
     @State private var errorMessage: String?
@@ -56,6 +58,8 @@ struct HappEditorView: View {
                 .pickerStyle(.segmented)
             }
             
+            inviteSection
+            
             Section("Details") {
                 TextField("Add notes or anything else", text: $details, axis: .vertical)
                     .lineLimit(3...6)
@@ -82,6 +86,48 @@ struct HappEditorView: View {
         }
     }
     
+    private var inviteSection: some View {
+        Section {
+            if groupStore.groups.isEmpty {
+                Text("Make a group in the Friends tab to invite people in one tap.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(groupStore.groups) { group in
+                    Toggle(isOn: inviteBinding(for: group)) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(group.name)
+                            Text("\(group.memberIDs.count) friends")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Invite a group")
+        }
+    }
+    
+    private func inviteBinding(for group: FriendGroup) -> Binding<Bool> {
+        Binding(
+            get: { invitedGroupIDs.contains(group.id) },
+            set: { isOn in
+                if isOn {
+                    invitedGroupIDs.insert(group.id)
+                } else {
+                    invitedGroupIDs.remove(group.id)
+                }
+            }
+        )
+    }
+    
+    private var invitedFriendIDs: [String] {
+        let members = groupStore.groups
+            .filter { invitedGroupIDs.contains($0.id) }
+            .flatMap(\.memberIDs)
+        return Array(Set(members))
+    }
+    
     private var errorIsPresented: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
@@ -102,10 +148,11 @@ struct HappEditorView: View {
                     location: location,
                     category: category,
                     startTime: startTime,
-                    latitude: selectedCoordinate?.latitude,
-                    longitude: selectedCoordinate?.longitude,
                     creatorID: user.uid,
                     creatorName: user.displayName ?? user.email ?? "Someone",
+                    latitude: selectedCoordinate?.latitude,
+                    longitude: selectedCoordinate?.longitude,
+                    invitedIDs: invitedFriendIDs
                 )
                 dismiss()
             } catch {
