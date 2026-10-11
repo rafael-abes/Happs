@@ -78,36 +78,12 @@ struct GroupsView: View {
     
     @ViewBuilder
     private func invitationRow(_ group: FriendGroup) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack {
-                invitationText(group)
-                Spacer()
-                invitationButtons(group)
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                invitationText(group)
-                invitationButtons(group)
-            }
-        }
-    }
-    
-    private func invitationText(_ group: FriendGroup) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(group.name).font(.headline)
-            Text("From \(groupStore.name(for: group.ownerID))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-    
-    private func invitationButtons(_ group: FriendGroup) -> some View {
-        HStack {
-            Button("Accept") { respond(group, accept: true) }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-            Button("Decline") { respond(group, accept: false) }
-                .buttonStyle(.bordered)
-        }
+        ResponseRow(
+            title: group.name,
+            subtitle: "From \(groupStore.name(for: group.ownerID))",
+            onAccept: { respond(group, accept: true) },
+            onDecline: { respond(group, accept: false) }
+        )
     }
     
     private func respond(_ group: FriendGroup, accept: Bool) {

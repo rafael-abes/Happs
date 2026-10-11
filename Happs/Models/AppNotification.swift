@@ -17,6 +17,8 @@ enum NotificationKind: String, Codable {
     case happCreated
     case happJoined
     case happLeft
+    case happUpdated
+    case happCancelled
     
     var symbolName: String {
         switch self {
@@ -25,6 +27,8 @@ enum NotificationKind: String, Codable {
         case .happCreated: "sparkles"
         case .happJoined: "person.crop.circle.badge.checkmark"
         case .happLeft: "person.crop.circle.badge.xmark"
+        case .happUpdated: "pencil.circle.fill"
+        case .happCancelled: "xmark.circle.fill"
         }
     }
 }

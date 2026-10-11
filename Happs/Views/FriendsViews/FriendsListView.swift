@@ -101,27 +101,12 @@ struct FriendsListView: View {
     
     @ViewBuilder
     private func requestRow(_ request: FriendRequest) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack {
-                Text(request.fromDisplayName)
-                Spacer()
-                requestButtons(request)
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                Text(request.fromDisplayName)
-                requestButtons(request)
-            }
-        }
-    }
-    
-    private func requestButtons(_ request: FriendRequest) -> some View {
-        HStack {
-            Button("Accept") { respond(request, accept: true) }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-            Button("Decline") { respond(request, accept: false) }
-                .buttonStyle(.bordered)
-        }
+        ResponseRow(
+            title: request.fromDisplayName,
+            subtitle: nil,
+            onAccept: { respond(request, accept: true) },
+            onDecline: { respond(request, accept: false) }
+        )
     }
     
     private var errorIsPresented: Binding<Bool> {
