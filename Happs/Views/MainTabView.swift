@@ -7,104 +7,37 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @AppStorage("prefersDarkMode") private var prefersDarkMode = false
-
     private enum Tab {
         case friends, happs, me
     }
-
+    
+    @EnvironmentObject private var notificationStore: NotificationStore
+    @AppStorage("prefersDarkMode") private var prefersDarkMode = false
     @State private var selectedTab: Tab = .happs
-
+    
     var body: some View {
-        VStack(spacing: 0) {
-
-            // Main page
-            Group {
-                switch selectedTab {
-                case .friends:
-                    FriendsListView()
-
-                case .happs:
-                    HappsListView()
-
-                case .me:
-                    ProfileView()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            // Custom tab bar
-            tabBar
+        TabView(selection: $selectedTab) {
+            FriendsListView()
+                .tabItem { tabLabel("Friends", imageName: prefersDarkMode ? "friendsLogoLight" : "friendsLogo") }
+                .tag(Tab.friends)
+            
+            HappsListView()
+                .tabItem { tabLabel("Happs", imageName: "happsLogo") }
+                .tag(Tab.happs)
+            
+            ProfileView()
+                .tabItem { tabLabel("Me", imageName: prefersDarkMode ? "meLogoLight" : "meLogo") }
+                .tag(Tab.me)
+                .badge(notificationStore.unreadCount)
         }
+        .tint(.green)
     }
-
-    private var tabBar: some View {
-        HStack {
-
-            // MARK: Friends
-            tabButton(
-                .friends,
-                imageName: prefersDarkMode ? "friendsLogoLight" : "friendsLogo",
-                label: "Friends"
-            )
-
-            Spacer()
-
-            // MARK: Happs
-            tabButton(
-                .happs,
-                imageName: "happsLogo",
-                label: "Happs"
-            )
-
-            Spacer()
-
-            // MARK: Me
-            tabButton(
-                .me,
-                imageName: prefersDarkMode ? "meLogoLight" : "meLogo",
-                label: "Me"
-            )
+    
+    private func tabLabel(_ title: String, imageName: String) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(imageName).renderingMode(.original)
         }
-        .padding(.horizontal, 40)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity)
-        .background(.bar)
-    }
-
-    private func tabButton(
-        _ tab: Tab,
-        imageName: String,
-        label: String
-    ) -> some View {
-
-        Button {
-            selectedTab = tab
-        } label: {
-            VStack(spacing: 4) {
-                Image(imageName)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 30, height: 30)
-
-                Text(label)
-                    .font(.caption2)
-            }
-            .foregroundStyle(
-                selectedTab == tab
-                ? .green
-                : .secondary
-            )
-            .padding(.horizontal, 18)
-            .padding(.vertical, 6)
-            .background {
-                if selectedTab == tab {
-                    Capsule()
-                        .fill(Color.gray.opacity(0.15))
-                }
-            }
-        }
-        .buttonStyle(.plain)
     }
 }

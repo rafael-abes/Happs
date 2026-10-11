@@ -17,89 +17,131 @@ final class FriendStore: ObservableObject {
     @Published private(set) var errorMessage: String?
     
     private let database: Firestore
+    private let notifications: NotificationWriter
     private var incomingListener: ListenerRegistration?
     private var profileListener: ListenerRegistration?
-    private var friendsListeners: [ListenerRegistration] = []
+    private var friendListeners: [ListenerRegistration] = []
     private var locationListeners: [ListenerRegistration] = []
+    private var watchedFriendIDs: [String]?
+    private var profilesByID: [String: UserProfile] = [:]
     
     init(database: Firestore = .firestore()) {
         self.database = database
+        self.notifications = NotificationWriter(database: database)
     }
     
     func startListening(for userID: String) {
+        incomingListener?.remove()
+        profileListener?.remove()
+        
         incomingListener = database.collection(FriendRequest.collectionName)
             .whereField("toUserID", isEqualTo: userID)
             .whereField("status", isEqualTo: FriendRequestStatus.pending.rawValue)
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
-                    if let error { self.errorMessage = error.localizedDescription; return }
+                    if let error {
+                        self.errorMessage = error.localizedDescription
+                        return
+                    }
                     self.incomingRequests = (snapshot?.documents ?? [])
                         .compactMap { try? $0.data(as: FriendRequest.self) }
                 }
             }
         
-        // Re-attach the friends listener whenever this user's own friendIDs array changes.
         profileListener = database.collection("users").document(userID)
             .addSnapshotListener { [weak self] snapshot, _ in
                 Task { @MainActor in
-                    guard let self, let profile = try? snapshot?.data(as: UserProfile.self) else { return }
-                    self.listenToFriends(ids: profile.friendIDs)
-                    self.listenToLocations(ids: profile.friendIDs)
+                    guard let self,
+                          let profile = try? snapshot?.data(as: UserProfile.self),
+                          profile.friendIDs != self.watchedFriendIDs else { return }
+                    self.watchedFriendIDs = profile.friendIDs
+                    self.watchFriends(ids: profile.friendIDs)
+                    self.watchLocations(ids: profile.friendIDs)
                 }
             }
     }
     
-
-    private func listenToFriends(ids: [String]) {
-        friendsListeners.forEach { $0.remove() }
-        friendsListeners = []
-        guard !ids.isEmpty else { friends = []; return }
+    func stopListening() {
+        incomingListener?.remove()
+        incomingListener = nil
+        profileListener?.remove()
+        profileListener = nil
+        friendListeners.forEach { $0.remove() }
+        friendListeners = []
+        locationListeners.forEach { $0.remove() }
+        locationListeners = []
+        watchedFriendIDs = nil
+        profilesByID = [:]
+        friends = []
+        friendLocations = [:]
+        incomingRequests = []
+    }
+    
+    func clearError() {
+        errorMessage = nil
+    }
+    
+    // MARK: - Listeners
+    
+    private static func chunks(of ids: [String]) -> [[String]] {
+        stride(from: 0, to: ids.count, by: 10).map { Array(ids[$0..<min($0 + 10, ids.count)]) }
+    }
+    
+    private func watchFriends(ids: [String]) {
+        friendListeners.forEach { $0.remove() }
+        friendListeners = []
+        profilesByID = [:]
+        guard !ids.isEmpty else {
+            friends = []
+            return
+        }
         
-        var combined: [String: UserProfile] = [:]
-        let chunks = stride(from: 0, to: ids.count, by: 10).map { Array(ids[$0..<min($0 + 10, ids.count)]) }
-        
-        for chunk in chunks {
+        for chunk in Self.chunks(of: ids) {
             let listener = database.collection("users")
                 .whereField(FieldPath.documentID(), in: chunk)
                 .addSnapshotListener { [weak self] snapshot, error in
                     Task { @MainActor in
                         guard let self else { return }
-                        if let error { self.errorMessage = error.localizedDescription; return }
-                        for profile in (snapshot?.documents ?? []).compactMap({ try? $0.data(as: UserProfile.self) }) {
-                            combined[profile.id] = profile
+                        if let error {
+                            self.errorMessage = error.localizedDescription
+                            return
                         }
-                        self.friends = Array(combined.values).sorted { $0.displayName < $1.displayName }
+                        for document in snapshot?.documents ?? [] {
+                            if let profile = try? document.data(as: UserProfile.self) {
+                                self.profilesByID[profile.id] = profile
+                            }
+                        }
+                        self.friends = self.profilesByID.values.sorted {
+                            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+                        }
                     }
                 }
-            friendsListeners.append(listener)
+            friendListeners.append(listener)
         }
     }
     
-    private func listenToLocations(ids: [String]) {
+    private func watchLocations(ids: [String]) {
         locationListeners.forEach { $0.remove() }
         locationListeners = []
-        guard !ids.isEmpty else { friendLocations = [:]; return }
+        friendLocations = [:]
+        guard !ids.isEmpty else { return }
         
-        let chunks = stride(from: 0, to: ids.count, by: 10).map { Array(ids[$0..<min($0 + 10, ids.count)]) }
-        for chunk in chunks {
+        for chunk in Self.chunks(of: ids) {
             let listener = database.collection("liveLocations")
                 .whereField(FieldPath.documentID(), in: chunk)
                 .addSnapshotListener { [weak self] snapshot, _ in
                     Task { @MainActor in
                         guard let self else { return }
                         let documents = snapshot?.documents ?? []
-                        for doc in documents {
-                            if let location = try? doc.data(as: LiveLocation.self) {
-                                self.friendLocations[location.id] = location
-                            }
-                        }
-                        // A friend whose doc is no longer returned here is either off
-                        // campus, invisible, or unfriended, the rule silently filters
-                        // them out rather than erroring, so we clear them locally too.
                         let present = Set(documents.map { $0.documentID })
                         for id in chunk where !present.contains(id) {
                             self.friendLocations.removeValue(forKey: id)
+                        }
+                        for document in documents {
+                            if let location = try? document.data(as: LiveLocation.self) {
+                                self.friendLocations[location.id] = location
+                            }
                         }
                     }
                 }
@@ -107,14 +149,7 @@ final class FriendStore: ObservableObject {
         }
     }
     
-    func stopListening() {
-        incomingListener?.remove(); incomingListener = nil
-        profileListener?.remove(); profileListener = nil
-        friendsListeners.forEach { $0.remove() }; friendsListeners = []
-        locationListeners.forEach { $0.remove() }; locationListeners = []
-        friends = []
-        incomingRequests = []
-    }
+    // MARK: - Search and requests
     
     func searchUsers(matching query: String, excluding currentUserID: String) async throws -> [UserSearchEntry] {
         let cleaned = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -136,6 +171,7 @@ final class FriendStore: ObservableObject {
         guard currentUserID != targetUserID else {
             throw AppError.invalidForm("You can't friend yourself.")
         }
+        
         let existing = try await database.collection(FriendRequest.collectionName)
             .whereField("fromUserID", isEqualTo: currentUserID)
             .whereField("toUserID", isEqualTo: targetUserID)
@@ -145,17 +181,35 @@ final class FriendStore: ObservableObject {
             throw AppError.invalidForm("Friend request already sent.")
         }
         
-        let request = FriendRequest(fromUserID: currentUserID, fromDisplayName: fromDisplayName, toUserID: targetUserID, status: .pending)
+        let request = FriendRequest(
+            fromUserID: currentUserID,
+            fromDisplayName: fromDisplayName,
+            toUserID: targetUserID,
+            status: .pending
+        )
         let data = try Firestore.Encoder().encode(request)
         try await database.collection(FriendRequest.collectionName).document().setData(data)
+        
+        await notifications.send([
+            NotificationDraft(
+                recipientID: targetUserID,
+                kind: .friendRequest,
+                title: "New friend request",
+                body: "\(fromDisplayName) wants to be your friend"
+            )
+        ], from: currentUserID)
     }
     
     func acceptRequest(_ request: FriendRequest) async throws {
         let batch = database.batch()
-        batch.updateData(["friendIDs": FieldValue.arrayUnion([request.toUserID])],
-                          forDocument: database.collection("users").document(request.fromUserID))
-        batch.updateData(["friendIDs": FieldValue.arrayUnion([request.fromUserID])],
-                          forDocument: database.collection("users").document(request.toUserID))
+        batch.updateData(
+            ["friendIDs": FieldValue.arrayUnion([request.toUserID])],
+            forDocument: database.collection("users").document(request.fromUserID)
+        )
+        batch.updateData(
+            ["friendIDs": FieldValue.arrayUnion([request.fromUserID])],
+            forDocument: database.collection("users").document(request.toUserID)
+        )
         batch.deleteDocument(database.collection(FriendRequest.collectionName).document(request.id))
         try await batch.commit()
     }
@@ -163,6 +217,4 @@ final class FriendStore: ObservableObject {
     func declineRequest(_ request: FriendRequest) async throws {
         try await database.collection(FriendRequest.collectionName).document(request.id).delete()
     }
-    
-    func clearError() { errorMessage = nil }
 }

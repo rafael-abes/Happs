@@ -45,11 +45,10 @@ struct AuthenticationView: View {
     }
     
     private var logoPlaceholder: some View {
-        Image(systemName: "figure.socialdance")
-            .font(.system(size: 64))
-            .foregroundStyle(Color.happsGreen)
+        Image("AppIcon")
+            .resizable()
+            .scaledToFit()
             .frame(width: 110, height: 110)
-            .background(Color.happsGreen.opacity(0.15), in: Circle())
     }
     
     private func filledPill(_ title: String) -> some View {
