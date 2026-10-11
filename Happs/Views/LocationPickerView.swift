@@ -20,6 +20,8 @@ struct LocationPickerView: View {
     @State private var searchText = ""
     @State private var results: [MKMapItem] = []
     @State private var searchTask: Task<Void, Never>?
+    @State private var isDroppingPin = false
+    @State private var pinPlaced = false
     @State private var errorMessage: String?
     
     private var trimmedQuery: String {
@@ -64,6 +66,15 @@ struct LocationPickerView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+            .sheet(isPresented: $isDroppingPin, onDismiss: {
+                if pinPlaced { dismiss() }
+            }) {
+                PinDropView(name: trimmedQuery, center: searchCenter) { coordinate in
+                    selectedName = trimmedQuery
+                    selectedCoordinate = coordinate
+                    pinPlaced = true
+                }
+            }
             .alert("Search Failed", isPresented: errorIsPresented) {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
@@ -77,8 +88,11 @@ struct LocationPickerView: View {
             Button(action: useTypedLocation) {
                 Label("Use \"\(trimmedQuery)\"", systemImage: "pencil.and.scribble")
             }
+            Button { isDroppingPin = true } label: {
+                Label("Drop a pin for \"\(trimmedQuery)\"", systemImage: "mappin.and.ellipse")
+            }
         } footer: {
-            Text("For spots Apple Maps won't know about, like a meeting point or a specific bench. No pin is placed on the map.")
+            Text("For spots Apple Maps won't know about. A dropped pin lets friends find it on the map.")
         }
     }
     

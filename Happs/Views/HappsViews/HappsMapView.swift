@@ -8,6 +8,7 @@
 
 import SwiftUI
 import MapKit
+import FirebaseAuth
 
 struct HappsMapView: View {
     private enum LayerMode: String, CaseIterable, Identifiable {
@@ -17,12 +18,21 @@ struct HappsMapView: View {
         var id: String { rawValue }
     }
     
+    private enum MapSelection: Hashable {
+        case happ(String)
+        case friend(String)
+    }
+    
+    @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
     @EnvironmentObject private var friendStore: FriendStore
     
     @State private var mode = LayerMode.all
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .region(LocationService.campusRegion))
-    @State private var selectedHappID: String?
+    @State private var selection: MapSelection?
+    @State private var detailHappID: String?
+    @State private var isJoining = false
+    @State private var errorMessage: String?
     
     private var showsHapps: Bool { mode != .friends }
     private var showsFriends: Bool { mode != .happs }
@@ -36,8 +46,14 @@ struct HappsMapView: View {
     }
     
     private var selectedHapp: Happ? {
-        guard showsHapps else { return nil }
-        return mappableHapps.first { $0.id == selectedHappID }
+        guard showsHapps, case .happ(let id)? = selection else { return nil }
+        return mappableHapps.first { $0.id == id }
+    }
+    
+    private var selectedFriend: UserProfile? {
+        guard showsFriends, case .friend(let id)? = selection,
+              friendStore.friendLocations[id] != nil else { return nil }
+        return friendStore.friends.first { $0.id == id }
     }
     
     private var mapStyle: MapStyle {
@@ -67,7 +83,15 @@ struct HappsMapView: View {
         }
         .safeAreaInset(edge: .top) { modePicker }
         .safeAreaInset(edge: .bottom) { bottomOverlay }
-        .onChange(of: mode) { _, _ in selectedHappID = nil }
+        .navigationDestination(item: $detailHappID) { id in
+            HappDetailView(happID: id)
+        }
+        .onChange(of: mode) { _, _ in selection = nil }
+        .alert("Couldn't Update", isPresented: errorIsPresented) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "Please try again.")
+        }
     }
     
     @MapContentBuilder
@@ -75,8 +99,8 @@ struct HappsMapView: View {
         ForEach(mappableHapps) { happ in
             if let coordinate = happ.coordinate {
                 Annotation(happ.title, coordinate: coordinate, anchor: .bottom) {
-                    HappPin(happ: happ, isSelected: happ.id == selectedHappID)
-                        .onTapGesture { selectedHappID = happ.id }
+                    HappPin(happ: happ, isSelected: selection == .happ(happ.id))
+                        .onTapGesture { selection = .happ(happ.id) }
                 }
                 .annotationTitles(.hidden)
             }
@@ -91,7 +115,8 @@ struct HappsMapView: View {
                     friend.displayName,
                     coordinate: CLLocationCoordinate2D(latitude: location.latitude, longitude: location.longitude)
                 ) {
-                    FriendPin(friend: friend)
+                    FriendPin(friend: friend, isSelected: selection == .friend(friend.id))
+                        .onTapGesture { selection = .friend(friend.id) }
                 }
                 .annotationTitles(.hidden)
             }
@@ -114,7 +139,20 @@ struct HappsMapView: View {
     @ViewBuilder
     private var bottomOverlay: some View {
         if let happ = selectedHapp {
-            detailCard(for: happ)
+            HappCard(
+                happ: happ,
+                currentUserID: authService.user?.uid ?? "",
+                isWorking: isJoining,
+                onJoinToggle: { toggleJoin(happ) },
+                onOpen: { detailHappID = happ.id },
+                onClose: { selection = nil }
+            )
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        } else if let friend = selectedFriend {
+            FriendCard(friend: friend, onClose: { selection = nil })
+                .padding(.horizontal)
+                .padding(.bottom, 8)
         } else if showsHapps && unmappedCount > 0 {
             Text("\(unmappedCount) happ\(unmappedCount == 1 ? "" : "s") without a map pin. See the list.")
                 .font(.caption)
@@ -124,100 +162,21 @@ struct HappsMapView: View {
         }
     }
     
-    private func detailCard(for happ: Happ) -> some View {
-        ZStack(alignment: .topTrailing) {
-            NavigationLink {
-                HappDetailView(happID: happ.id)
-            } label: {
-                cardContent(for: happ)
-            }
-            .buttonStyle(.plain)
-            
-            Button {
-                selectedHappID = nil
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .padding(8)
-            }
-            .accessibilityLabel("Close")
-        }
-        .padding(.horizontal)
-        .padding(.bottom, 8)
+    private var errorIsPresented: Binding<Bool> {
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
     
-    private func cardContent(for happ: Happ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(happ.title).font(.headline)
-            Text("\(happ.category.rawValue) · \(happ.location)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text("\(happ.startTime.formatted(date: .abbreviated, time: .shortened)) · \(happ.creatorName)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .padding(.trailing, 24)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-    }
-}
-
-private struct HappPin: View {
-    let happ: Happ
-    let isSelected: Bool
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: happ.category.symbolName)
-                    .font(.caption.bold())
-                    .foregroundStyle(.white)
-                    .frame(width: 26, height: 26)
-                    .background(happ.category.tint, in: Circle())
-                
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(happ.title)
-                        .font(.caption.bold())
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text("\(happ.participantIDs.count) going")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+    private func toggleJoin(_ happ: Happ) {
+        guard let userID = authService.user?.uid else { return }
+        let joining = !happ.containsParticipant(userID)
+        isJoining = true
+        Task {
+            defer { isJoining = false }
+            do {
+                try await happStore.toggleParticipation(happID: happ.id, userID: userID, isJoining: joining)
+            } catch {
+                errorMessage = error.localizedDescription
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(Color(.systemBackground), in: Capsule())
-            .overlay(Capsule().stroke(happ.category.tint, lineWidth: isSelected ? 3 : 2))
-            .shadow(radius: 4, y: 2)
-            
-            Image(systemName: "arrowtriangle.down.fill")
-                .font(.system(size: 10))
-                .foregroundStyle(happ.category.tint)
-                .offset(y: -2)
         }
-        .scaleEffect(isSelected ? 1.15 : 1, anchor: .bottom)
-        .dynamicTypeSize(...DynamicTypeSize.xLarge)
-    }
-}
-
-private struct FriendPin: View {
-    let friend: UserProfile
-    
-    var body: some View {
-        VStack(spacing: 2) {
-            Circle()
-                .fill(friend.status.color)
-                .frame(width: 14, height: 14)
-                .overlay(Circle().stroke(.white, lineWidth: 2))
-            Text(friend.displayName)
-                .font(.caption2)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(.thinMaterial, in: Capsule())
-        }
-        .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 }

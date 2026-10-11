@@ -125,6 +125,7 @@ struct HappEditorView: View {
         let members = groupStore.groups
             .filter { invitedGroupIDs.contains($0.id) }
             .flatMap(\.memberIDs)
+            .filter { $0 != authService.user?.uid }
         return Array(Set(members))
     }
     

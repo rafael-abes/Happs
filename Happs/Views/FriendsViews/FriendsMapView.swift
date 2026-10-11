@@ -8,17 +8,15 @@
 import SwiftUI
 import MapKit
 
+
 struct FriendsMapView: View {
     @EnvironmentObject private var friendStore: FriendStore
-    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .region(Self.campusRegion))
+    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .region(LocationService.campusRegion))
+    @State private var selectedFriendID: String?
     
-    private static var campusRegion: MKCoordinateRegion {
-        let coordinates = LocationService.campusBoundary
-        let lats = coordinates.map(\.latitude), lons = coordinates.map(\.longitude)
-        return MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: (lats.min()! + lats.max()!) / 2, longitude: (lons.min()! + lons.max()!) / 2),
-            span: MKCoordinateSpan(latitudeDelta: (lats.max()! - lats.min()!) * 1.6, longitudeDelta: (lons.max()! - lons.min()!) * 1.6)
-        )
+    private var selectedFriend: UserProfile? {
+        guard let id = selectedFriendID, friendStore.friendLocations[id] != nil else { return nil }
+        return friendStore.friends.first { $0.id == id }
     }
     
     var body: some View {
@@ -29,25 +27,34 @@ struct FriendsMapView: View {
                 .foregroundStyle(.green.opacity(0.12))
                 .stroke(.green, lineWidth: 2)
             
-            ForEach(friendStore.friends) { friend in
-                if let location = friendStore.friendLocations[friend.id] {
-                    Annotation(friend.displayName, coordinate: CLLocationCoordinate2D(latitude: location.latitude, longitude: location.longitude)) {
-                        VStack(spacing: 2) {
-                            Circle().fill(friend.status.color).frame(width: 12, height: 12)
-                                .overlay(Circle().stroke(.white, lineWidth: 2))
-                            Text(friend.displayName)
-                                .font(.caption2)
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(.thinMaterial, in: Capsule())
-                        }
-                        .dynamicTypeSize(...DynamicTypeSize.xLarge)
-                    }
-                }
-            }
+            friendAnnotations
         }
         .mapControls {
             MapUserLocationButton()
             MapCompass()
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let friend = selectedFriend {
+                FriendCard(friend: friend, onClose: { selectedFriendID = nil })
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+            }
+        }
+    }
+    
+    @MapContentBuilder
+    private var friendAnnotations: some MapContent {
+        ForEach(friendStore.friends) { friend in
+            if let location = friendStore.friendLocations[friend.id] {
+                Annotation(
+                    friend.displayName,
+                    coordinate: CLLocationCoordinate2D(latitude: location.latitude, longitude: location.longitude)
+                ) {
+                    FriendPin(friend: friend, isSelected: selectedFriendID == friend.id)
+                        .onTapGesture { selectedFriendID = friend.id }
+                }
+                .annotationTitles(.hidden)
+            }
         }
     }
 }

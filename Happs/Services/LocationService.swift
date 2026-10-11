@@ -20,10 +20,10 @@ final class LocationService: NSObject, ObservableObject {
     private var currentUserID: String?
     
     static let campusBoundary: [CLLocationCoordinate2D] = [
-        CLLocationCoordinate2D(latitude: -37.90777268374264, longitude: 145.13021258121205),
-        CLLocationCoordinate2D(latitude: -37.90830783929267, longitude: 145.1366105888795),
-        CLLocationCoordinate2D(latitude: -37.91522197879005, longitude: 145.1341950163024),
-        CLLocationCoordinate2D(latitude: -37.91358788712169, longitude: 145.12876989249247)
+        CLLocationCoordinate2D(latitude: -37.90670054042203, longitude: 145.14179024978608),
+        CLLocationCoordinate2D(latitude: -37.91590874335654, longitude: 145.13996290463174),
+        CLLocationCoordinate2D(latitude: -37.91414957559327, longitude: 145.12767414509705),
+        CLLocationCoordinate2D(latitude: -37.90731929578369, longitude: 145.1288163701678)
     ]
     
     override init() {
