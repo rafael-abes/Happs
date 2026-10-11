@@ -35,6 +35,7 @@ final class ProfileStore: ObservableObject {
                         let newProfile = try snapshot?.data(as: UserProfile.self)
                         guard newProfile?.status != self.profile?.status
                             || newProfile?.isVisible != self.profile?.isVisible
+                            || newProfile?.avatarSymbol != self.profile?.avatarSymbol
                             || self.profile == nil else { return }
                         self.profile = newProfile
                     } catch {
@@ -47,7 +48,9 @@ final class ProfileStore: ObservableObject {
     }
     
     func stopListening() {
-        listener?.remove(); listener = nil; profile = nil
+        listener?.remove()
+        listener = nil
+        profile = nil
     }
     
     func updateStatus(_ status: UserStatus, for userID: String) async throws {
@@ -59,5 +62,9 @@ final class ProfileStore: ObservableObject {
     
     func setVisible(_ isVisible: Bool, for userID: String) async throws {
         try await database.collection("users").document(userID).updateData(["isVisible": isVisible])
+    }
+    
+    func updateAvatar(_ symbol: String, for userID: String) async throws {
+        try await database.collection("users").document(userID).updateData(["avatarSymbol": symbol])
     }
 }

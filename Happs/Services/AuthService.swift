@@ -34,8 +34,6 @@ final class AuthService: ObservableObject {
         }
     }
     
-    // MARK: - Email/Password
-    
     func signIn(email: String, password: String) async throws {
         let cleanedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedEmail.isEmpty, !password.isEmpty else {
@@ -63,7 +61,7 @@ final class AuthService: ObservableObject {
         request.displayName = cleanedName
         try await request.commitChanges()
         
-        let profile = UserProfile(id: result.user.uid, displayName: cleanedName, email: cleanedEmail, phoneNumber: nil)
+        let profile = UserProfile(id: result.user.uid, displayName: cleanedName, email: cleanedEmail)
         
         do {
             try await database.collection("users").document(profile.id).setData(profile.creationData)
@@ -75,44 +73,6 @@ final class AuthService: ObservableObject {
         }
     }
     
-    // MARK: - Phone
-    
-    func startPhoneVerification(phoneNumber: String) async throws -> String {
-        let cleanedNumber = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard cleanedNumber.hasPrefix("+"), cleanedNumber.count >= 8 else {
-            throw AppError.invalidForm("Enter your number in international format, e.g. +61412345678.")
-        }
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            PhoneAuthProvider.provider().verifyPhoneNumber(cleanedNumber, uiDelegate: nil) { verificationID, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else if let verificationID {
-                    continuation.resume(returning: verificationID)
-                } else {
-                    continuation.resume(throwing: AppError.invalidForm("Could not start phone verification. Try again."))
-                }
-            }
-        }
-    }
-    
-    func signIn(verificationID: String, code: String, displayName: String) async throws {
-        let cleanedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanedCode.isEmpty else {
-            throw AppError.invalidForm("Enter the code we texted you.")
-        }
-        
-        let credential = PhoneAuthProvider.provider().credential(
-            withVerificationID: verificationID,
-            verificationCode: cleanedCode
-        )
-        let result = try await auth.signIn(with: credential)
-        try await ensureProfileExists(for: result.user, fallbackDisplayName: displayName)
-    }
-    
-    // MARK: - Google
-    
-    /// Presents Google's sign-in sheet, then exchanges the result for a Firebase session.
     func signInWithGoogle() async throws {
         guard let clientID = FirebaseApp.app()?.options.clientID else {
             throw AppError.invalidForm("Missing Google client ID. Check GoogleService-Info.plist.")
@@ -145,8 +105,13 @@ final class AuthService: ObservableObject {
         request.displayName = name
         try await request.commitChanges()
         try await database.collection("users").document(user.uid).updateData(["displayName": name])
-        
-        try await database.collection(UserSearchEntry.collectionName).document(user.uid).updateData(["displayName": name])
+        try await writeSearchIndex(userID: user.uid, displayName: name)
+        try await user.reload()
+        self.user = auth.currentUser
+    }
+    
+    func signOut() throws {
+        try auth.signOut()
     }
     
     private static func topViewController() -> UIViewController? {
@@ -156,11 +121,6 @@ final class AuthService: ObservableObject {
             .first(where: \.isKeyWindow)?.rootViewController
     }
     
-    // MARK: - Shared
-    
-    /// Creates a Firestore profile only if one doesn't already exist. Phone and Google
-    /// sign-in can both resolve to either a brand-new account or a returning one, so
-    /// this must never overwrite existing data.
     private func ensureProfileExists(for user: FirebaseAuth.User, fallbackDisplayName: String) async throws {
         let reference = database.collection("users").document(user.uid)
         let snapshot = try await reference.getDocument()
@@ -175,10 +135,6 @@ final class AuthService: ObservableObject {
         )
         try await reference.setData(profile.creationData)
         try await writeSearchIndex(userID: user.uid, displayName: profile.displayName)
-    }
-    
-    func signOut() throws {
-        try auth.signOut()
     }
     
     private func writeSearchIndex(userID: String, displayName: String) async throws {
