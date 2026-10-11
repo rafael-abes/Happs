@@ -20,6 +20,7 @@ struct UserProfile: Codable, Identifiable {
     let displayName: String
     let email: String
     let phoneNumber: String?
+    var avatarSymbol: String?
     var status: UserStatus
     var isVisible: Bool
     var friendIDs: [String]
@@ -27,11 +28,12 @@ struct UserProfile: Codable, Identifiable {
     
     var id: String { documentID ?? "" }
     
-    init(id: String, displayName: String, email: String, phoneNumber: String? = nil, status: UserStatus = .available, isVisible: Bool = true, friendIDs: [String] = []) {
+    init(id: String, displayName: String, email: String, phoneNumber: String? = nil, avatarSymbol: String? = nil, status: UserStatus = .available, isVisible: Bool = true, friendIDs: [String] = []) {
         self.documentID = id
         self.displayName = displayName
         self.email = email
         self.phoneNumber = phoneNumber
+        self.avatarSymbol = avatarSymbol
         self.status = status
         self.isVisible = isVisible
         self.friendIDs = friendIDs
@@ -45,6 +47,7 @@ struct UserProfile: Codable, Identifiable {
             "createdAt": FieldValue.serverTimestamp(), "statusUpdatedAt": FieldValue.serverTimestamp()
         ]
         if let phoneNumber { data["phoneNumber"] = phoneNumber }
+        if let avatarSymbol { data["avatarSymbol"] = avatarSymbol }
         return data
     }
 }

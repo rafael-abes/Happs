@@ -65,8 +65,7 @@ struct ProfileView: View {
     
     private var header: some View {
         VStack(spacing: 6) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: avatarSize))
+            AvatarView(symbol: profileStore.profile?.avatarSymbol, size: avatarSize)
             Text(authService.user?.displayName ?? "Happs User").font(.title2.bold())
             
             Menu {
