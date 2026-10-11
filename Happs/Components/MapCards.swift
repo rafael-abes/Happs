@@ -30,6 +30,10 @@ struct HappCard: View {
     let onOpen: () -> Void
     let onClose: () -> Void
     
+    private var isHost: Bool {
+        happ.creatorID == currentUserID
+    }
+    
     private var isJoined: Bool {
         happ.containsParticipant(currentUserID)
     }
@@ -39,6 +43,16 @@ struct HappCard: View {
             return happ.startTime.formatted(date: .omitted, time: .shortened)
         }
         return happ.startTime.formatted(date: .abbreviated, time: .shortened)
+    }
+    
+    private var buttonTitle: String {
+        if isHost { return "Hosting" }
+        return isJoined ? "Joined" : "Join"
+    }
+    
+    private var buttonSymbol: String {
+        if isHost { return "star.fill" }
+        return isJoined ? "checkmark.circle.fill" : "plus.circle"
     }
     
     var body: some View {
@@ -73,7 +87,7 @@ struct HappCard: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
-            joinButton
+            actionButton
         }
     }
     
@@ -94,11 +108,12 @@ struct HappCard: View {
             .background(Color(.tertiarySystemFill), in: Capsule())
     }
     
-    private var joinButton: some View {
-        Button(action: onJoinToggle) {
-            Label(isJoined ? "Joined" : "Join", systemImage: isJoined ? "checkmark.circle.fill" : "plus.circle")
+    /// Hosts open the detail screen instead, so a stray tap can't delete their Happ.
+    private var actionButton: some View {
+        Button(action: isHost ? onOpen : onJoinToggle) {
+            Label(buttonTitle, systemImage: buttonSymbol)
                 .font(.subheadline)
-                .foregroundStyle(isJoined ? Color.happsGreen : Color.secondary)
+                .foregroundStyle(isHost || isJoined ? Color.happsGreen : Color.secondary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(Color(.tertiarySystemFill), in: Capsule())

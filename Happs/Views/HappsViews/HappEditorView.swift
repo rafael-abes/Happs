@@ -9,21 +9,33 @@ import CoreLocation
 import FirebaseAuth
 
 struct HappEditorView: View {
+    private let editing: Happ?
+    
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
     @EnvironmentObject private var groupStore: GroupStore
     @Environment(\.dismiss) private var dismiss
     
-    @State private var title = ""
-    @State private var details = ""
-    @State private var location = ""
+    @State private var title: String
+    @State private var details: String
+    @State private var location: String
     @State private var selectedCoordinate: CLLocationCoordinate2D?
-    @State private var category = HappCategory.happs
-    @State private var startTime = Date()
+    @State private var category: HappCategory
+    @State private var startTime: Date
     @State private var invitedGroupIDs: Set<String> = []
-    @State private var isCreating = false
+    @State private var isSaving = false
     @State private var isPresentingLocationPicker = false
     @State private var errorMessage: String?
+    
+    init(happ: Happ? = nil) {
+        editing = happ
+        _title = State(initialValue: happ?.title ?? "")
+        _details = State(initialValue: happ?.details ?? "")
+        _location = State(initialValue: happ?.location ?? "")
+        _selectedCoordinate = State(initialValue: happ?.coordinate)
+        _category = State(initialValue: happ?.category ?? .happs)
+        _startTime = State(initialValue: happ?.startTime ?? Date())
+    }
     
     var body: some View {
         Form {
@@ -58,28 +70,30 @@ struct HappEditorView: View {
                 .pickerStyle(.segmented)
             }
             
-            inviteSection
+            if editing == nil {
+                inviteSection
+            }
             
             Section("Details") {
                 TextField("Add notes or anything else", text: $details, axis: .vertical)
                     .lineLimit(3...6)
             }
         }
-        .navigationTitle("New Happ")
+        .navigationTitle(editing == nil ? "New Happ" : "Edit Happ")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Add Happ") { createHapp() }.disabled(isCreating)
+                Button(editing == nil ? "Add Happ" : "Save") { save() }.disabled(isSaving)
             }
         }
-        .interactiveDismissDisabled(isCreating)
+        .interactiveDismissDisabled(isSaving)
         .sheet(isPresented: $isPresentingLocationPicker) {
             LocationPickerView(category: category, selectedName: $location, selectedCoordinate: $selectedCoordinate)
         }
-        .alert("Cannot Create Happ", isPresented: errorIsPresented) {
+        .alert("Couldn't Save Happ", isPresented: errorIsPresented) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "Please try again.")
@@ -96,7 +110,7 @@ struct HappEditorView: View {
                     Toggle(isOn: inviteBinding(for: group)) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(group.name)
-                            Text("\(group.memberIDs.count) friends")
+                            Text("\(group.memberIDs.count) members")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -133,28 +147,41 @@ struct HappEditorView: View {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
     
-    private func createHapp() {
+    private func save() {
         guard let user = authService.user else {
             errorMessage = "Sign in again before saving."
             return
         }
         
-        isCreating = true
+        isSaving = true
         Task {
-            defer { isCreating = false }
+            defer { isSaving = false }
             do {
-                try await happStore.createHapp(
-                    title: title,
-                    details: details,
-                    location: location,
-                    category: category,
-                    startTime: startTime,
-                    creatorID: user.uid,
-                    creatorName: user.displayName ?? user.email ?? "Someone",
-                    latitude: selectedCoordinate?.latitude,
-                    longitude: selectedCoordinate?.longitude,
-                    invitedIDs: invitedFriendIDs
-                )
+                if let editing {
+                    try await happStore.updateHapp(
+                        editing,
+                        title: title,
+                        details: details,
+                        location: location,
+                        category: category,
+                        startTime: startTime,
+                        latitude: selectedCoordinate?.latitude,
+                        longitude: selectedCoordinate?.longitude
+                    )
+                } else {
+                    try await happStore.createHapp(
+                        title: title,
+                        details: details,
+                        location: location,
+                        category: category,
+                        startTime: startTime,
+                        creatorID: user.uid,
+                        creatorName: user.displayName ?? user.email ?? "Someone",
+                        latitude: selectedCoordinate?.latitude,
+                        longitude: selectedCoordinate?.longitude,
+                        invitedIDs: invitedFriendIDs
+                    )
+                }
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

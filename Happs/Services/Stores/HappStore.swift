@@ -57,6 +57,8 @@ final class HappStore: ObservableObject {
         errorMessage = nil
     }
     
+    // MARK: - Create, update, delete
+    
     func createHapp(
         title: String,
         details: String,
@@ -69,6 +71,120 @@ final class HappStore: ObservableObject {
         longitude: Double? = nil,
         invitedIDs: [String] = []
     ) async throws {
+        let checked = try validated(title: title, location: location)
+        
+        let happ = Happ(
+            title: checked.title,
+            details: details.trimmingCharacters(in: .whitespacesAndNewlines),
+            location: checked.location,
+            category: category,
+            participantIDs: [creatorID],
+            creatorID: creatorID,
+            creatorName: creatorName,
+            startTime: startTime,
+            latitude: latitude,
+            longitude: longitude,
+            invitedIDs: invitedIDs.isEmpty ? nil : invitedIDs
+        )
+        
+        let data = try Firestore.Encoder().encode(happ)
+        try await database.collection(Happ.collectionName).document().setData(data)
+        
+        await notifyFriendsOfNewHapp(
+            title: checked.title,
+            creatorID: creatorID,
+            creatorName: creatorName,
+            invitedIDs: invitedIDs
+        )
+    }
+    
+    func updateHapp(
+        _ happ: Happ,
+        title: String,
+        details: String,
+        location: String,
+        category: HappCategory,
+        startTime: Date,
+        latitude: Double?,
+        longitude: Double?
+    ) async throws {
+        let checked = try validated(title: title, location: location)
+        
+        var fields: [String: Any] = [
+            "title": checked.title,
+            "details": details.trimmingCharacters(in: .whitespacesAndNewlines),
+            "location": checked.location,
+            "category": category.rawValue,
+            "startTime": Timestamp(date: startTime)
+        ]
+        if let latitude, let longitude {
+            fields["latitude"] = latitude
+            fields["longitude"] = longitude
+        } else {
+            fields["latitude"] = FieldValue.delete()
+            fields["longitude"] = FieldValue.delete()
+        }
+        
+        try await database.collection(Happ.collectionName).document(happ.id).updateData(fields)
+        
+        let others = happ.participantIDs.filter { $0 != happ.creatorID }
+        let drafts = others.map {
+            NotificationDraft(
+                recipientID: $0,
+                kind: .happUpdated,
+                title: "Happ updated",
+                body: "\(happ.creatorName) updated \(checked.title)"
+            )
+        }
+        await notifications.send(drafts, from: happ.creatorID)
+    }
+    
+    func deleteHapp(_ happ: Happ) async throws {
+        try await database.collection(Happ.collectionName).document(happ.id).delete()
+        
+        let others = happ.participantIDs.filter { $0 != happ.creatorID }
+        let drafts = others.map {
+            NotificationDraft(
+                recipientID: $0,
+                kind: .happCancelled,
+                title: "Happ cancelled",
+                body: "\(happ.creatorName) cancelled \(happ.title)"
+            )
+        }
+        await notifications.send(drafts, from: happ.creatorID)
+    }
+    
+    // MARK: - Joining and leaving
+    
+    func toggleParticipation(happID: String, userID: String, isJoining: Bool) async throws {
+        let currentHapp = happs.first { $0.id == happID }
+        
+        // A Happ with no host is meaningless, so the creator leaving deletes it.
+        if !isJoining, let host = currentHapp, host.creatorID == userID {
+            try await deleteHapp(host)
+            return
+        }
+        
+        let reference = database.collection(Happ.collectionName).document(happID)
+        let update: [String: Any] = [
+            "participantIDs": isJoining ? FieldValue.arrayUnion([userID]) : FieldValue.arrayRemove([userID])
+        ]
+        try await reference.updateData(update)
+        
+        guard let happ = currentHapp else { return }
+        let name = NotificationWriter.actorName
+        let draft = NotificationDraft(
+            recipientID: happ.creatorID,
+            kind: isJoining ? .happJoined : .happLeft,
+            title: isJoining ? "New attendee" : "Someone left",
+            body: isJoining ? "\(name) joined \(happ.title)" : "\(name) left \(happ.title)"
+        )
+        await notifications.send([draft], from: userID)
+    }
+    
+    // MARK: - Helpers
+    
+    private func validated(title: String, location: String) throws -> (title: String, location: String) {
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedLocation = location.trimmingCharacters(in: .whitespacesAndNewlines)
         
@@ -81,49 +197,7 @@ final class HappStore: ObservableObject {
         guard cleanedTitle.count <= 80 else {
             throw AppError.invalidForm("The title must be 80 characters or fewer.")
         }
-        
-        let happ = Happ(
-            title: cleanedTitle,
-            details: details.trimmingCharacters(in: .whitespacesAndNewlines),
-            location: cleanedLocation,
-            category: category,
-            participantIDs: [creatorID],
-            creatorID: creatorID,
-            creatorName: creatorName,
-            startTime: startTime,
-            latitude: latitude,
-            longitude: longitude,
-            invitedIDs: invitedIDs.isEmpty ? nil : invitedIDs
-        )
-        
-        let data = try Firestore.Encoder().encode(happ)
-        let reference = database.collection(Happ.collectionName).document()
-        try await reference.setData(data)
-        
-        await notifyFriendsOfNewHapp(
-            title: cleanedTitle,
-            creatorID: creatorID,
-            creatorName: creatorName,
-            invitedIDs: invitedIDs
-        )
-    }
-    
-    func toggleParticipation(happID: String, userID: String, isJoining: Bool) async throws {
-        let reference = database.collection(Happ.collectionName).document(happID)
-        let update: [String: Any] = [
-            "participantIDs": isJoining ? FieldValue.arrayUnion([userID]) : FieldValue.arrayRemove([userID])
-        ]
-        try await reference.updateData(update)
-        
-        guard let happ = happs.first(where: { $0.id == happID }) else { return }
-        let name = NotificationWriter.actorName
-        let draft = NotificationDraft(
-            recipientID: happ.creatorID,
-            kind: isJoining ? .happJoined : .happLeft,
-            title: isJoining ? "New attendee" : "Someone left",
-            body: isJoining ? "\(name) joined \(happ.title)" : "\(name) left \(happ.title)"
-        )
-        await notifications.send([draft], from: userID)
+        return (cleanedTitle, cleanedLocation)
     }
     
     private func notifyFriendsOfNewHapp(title: String, creatorID: String, creatorName: String, invitedIDs: [String]) async {

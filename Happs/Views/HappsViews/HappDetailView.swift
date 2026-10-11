@@ -10,9 +10,12 @@ import FirebaseAuth
 struct HappDetailView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
+    @Environment(\.dismiss) private var dismiss
     let happID: String
     
     @State private var isWorking = false
+    @State private var isEditing = false
+    @State private var isConfirmingDelete = false
     @State private var errorMessage: String?
     
     private var happ: Happ? {
@@ -22,26 +25,7 @@ struct HappDetailView: View {
     var body: some View {
         Group {
             if let happ, let currentUserID = authService.user?.uid {
-                List {
-                    Section(happ.title) {
-                        Text(happ.details.isEmpty ? "No description added." : happ.details)
-                    }
-                    
-                    Section("Details") {
-                        LabeledContent("Category", value: happ.category.rawValue)
-                        LabeledContent("Location", value: happ.location)
-                        LabeledContent("Starts", value: happ.startTime.formatted(date: .abbreviated, time: .shortened))
-                        LabeledContent("Organiser", value: happ.creatorName)
-                        LabeledContent("Going", value: "\(happ.participantIDs.count)")
-                    }
-                    
-                    Section {
-                        Button(happ.containsParticipant(currentUserID) ? "Leave Happ" : "Join Happ") {
-                            toggleParticipation(happ: happ, userID: currentUserID)
-                        }
-                        .disabled(isWorking)
-                    }
-                }
+                content(for: happ, currentUserID: currentUserID)
             } else {
                 ContentUnavailableView(
                     "Happ Not Found",
@@ -50,10 +34,58 @@ struct HappDetailView: View {
                 )
             }
         }
+        .navigationTitle(happ?.title ?? "Happ")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let happ, happ.creatorID == authService.user?.uid {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Edit") { isEditing = true }
+                }
+            }
+        }
+        .sheet(isPresented: $isEditing) {
+            if let happ {
+                NavigationStack { HappEditorView(happ: happ) }
+            }
+        }
+        .confirmationDialog("Cancel this Happ?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+            Button("Cancel Happ", role: .destructive) { deleteHapp() }
+            Button("Keep", role: .cancel) { }
+        } message: {
+            Text("It will be removed for everyone who joined.")
+        }
         .alert("Something Went Wrong", isPresented: errorIsPresented) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "Please try again.")
+        }
+    }
+    
+    private func content(for happ: Happ, currentUserID: String) -> some View {
+        List {
+            Section {
+                Text(happ.details.isEmpty ? "No description added." : happ.details)
+            }
+            
+            Section("Details") {
+                LabeledContent("Category", value: happ.category.rawValue)
+                LabeledContent("Location", value: happ.location)
+                LabeledContent("Starts", value: happ.startTime.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("Organiser", value: happ.creatorName)
+                LabeledContent("Going", value: "\(happ.participantIDs.count)")
+            }
+            
+            Section {
+                if happ.creatorID == currentUserID {
+                    Button("Cancel Happ", role: .destructive) { isConfirmingDelete = true }
+                        .disabled(isWorking)
+                } else {
+                    Button(happ.containsParticipant(currentUserID) ? "Leave Happ" : "Join Happ") {
+                        toggleParticipation(happ: happ, userID: currentUserID)
+                    }
+                    .disabled(isWorking)
+                }
+            }
         }
     }
     
@@ -68,6 +100,20 @@ struct HappDetailView: View {
             defer { isWorking = false }
             do {
                 try await happStore.toggleParticipation(happID: happ.id, userID: userID, isJoining: isJoining)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+    
+    private func deleteHapp() {
+        guard let happ else { return }
+        isWorking = true
+        Task {
+            defer { isWorking = false }
+            do {
+                try await happStore.deleteHapp(happ)
+                dismiss()
             } catch {
                 errorMessage = error.localizedDescription
             }
