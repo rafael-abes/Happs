@@ -18,12 +18,14 @@ final class GroupStore: ObservableObject {
     @Published private(set) var errorMessage: String?
     
     private let database: Firestore
+    private let notifications: NotificationWriter
     private var memberListener: ListenerRegistration?
     private var inviteListener: ListenerRegistration?
     private var activityListener: ListenerRegistration?
     
     init(database: Firestore = .firestore()) {
         self.database = database
+        self.notifications = NotificationWriter(database: database)
     }
     
     func name(for userID: String) -> String {
@@ -38,7 +40,10 @@ final class GroupStore: ObservableObject {
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
-                    if let error { self.errorMessage = error.localizedDescription; return }
+                    if let error {
+                        self.errorMessage = error.localizedDescription
+                        return
+                    }
                     self.groups = Self.decodeGroups(snapshot)
                 }
             }
@@ -48,15 +53,20 @@ final class GroupStore: ObservableObject {
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
-                    if let error { self.errorMessage = error.localizedDescription; return }
+                    if let error {
+                        self.errorMessage = error.localizedDescription
+                        return
+                    }
                     self.invitations = Self.decodeGroups(snapshot)
                 }
             }
     }
     
     func stopListening() {
-        memberListener?.remove(); memberListener = nil
-        inviteListener?.remove(); inviteListener = nil
+        memberListener?.remove()
+        memberListener = nil
+        inviteListener?.remove()
+        inviteListener = nil
         stopActivity()
         groups = []
         invitations = []
@@ -82,7 +92,9 @@ final class GroupStore: ObservableObject {
         activity = []
     }
     
-    func clearError() { errorMessage = nil }
+    func clearError() {
+        errorMessage = nil
+    }
     
     func resolveNames(for ids: [String]) async {
         let missing = Array(Set(ids).filter { names[$0] == nil })
@@ -101,6 +113,8 @@ final class GroupStore: ObservableObject {
         }
     }
     
+    // MARK: - Create, edit, delete
+    
     func createGroup(name: String, ownerID: String, inviteIDs: [String]) async throws {
         let cleaned = try validatedName(name, excluding: nil)
         guard !inviteIDs.isEmpty else {
@@ -109,38 +123,22 @@ final class GroupStore: ObservableObject {
         let group = FriendGroup(name: cleaned, ownerID: ownerID, memberIDs: [ownerID], invitedIDs: inviteIDs)
         let data = try Firestore.Encoder().encode(group)
         try await database.collection(FriendGroup.collectionName).document().setData(data)
+        
+        await notifyInvitees(inviteIDs, groupName: cleaned, ownerID: ownerID)
     }
     
     func updateGroup(_ group: FriendGroup, name: String, selectedIDs: Set<String>) async throws {
         let cleaned = try validatedName(name, excluding: group.id)
         let keptMembers = group.memberIDs.filter { $0 == group.ownerID || selectedIDs.contains($0) }
-        let invited = selectedIDs.subtracting(Set(group.memberIDs))
+        let invited = selectedIDs.subtracting(group.memberIDs)
         try await database.collection(FriendGroup.collectionName).document(group.id).updateData([
             "name": cleaned,
             "memberIDs": keptMembers,
             "invitedIDs": Array(invited)
         ])
-    }
-    
-    func respond(to group: FriendGroup, accept: Bool, userID: String, userName: String) async {
-        let groupReference = database.collection(FriendGroup.collectionName).document(group.id)
-        let text = accept
-            ? "\(userName) has joined group \(group.name)"
-            : "\(userName) has declined invitation to \(group.name)"
         
-        var update: [String: Any] = ["invitedIDs": FieldValue.arrayRemove([userID])]
-        if accept { update["memberIDs"] = FieldValue.arrayUnion([userID]) }
-        
-        await commit(update: update, text: text, group: group, userID: userID)
-    }
-    
-    func leave(_ group: FriendGroup, userID: String, userName: String) async {
-        await commit(
-            update: ["memberIDs": FieldValue.arrayRemove([userID])],
-            text: "\(userName) has left group \(group.name)",
-            group: group,
-            userID: userID
-        )
+        let newlyInvited = invited.subtracting(group.invitedIDs)
+        await notifyInvitees(Array(newlyInvited), groupName: cleaned, ownerID: group.ownerID)
     }
     
     func deleteGroup(_ group: FriendGroup) async {
@@ -151,7 +149,36 @@ final class GroupStore: ObservableObject {
         }
     }
     
-    private func commit(update: [String: Any], text: String, group: FriendGroup, userID: String) async {
+    // MARK: - Responding to invites
+    
+    func respond(to group: FriendGroup, accept: Bool, userID: String, userName: String) async {
+        let text = accept
+            ? "\(userName) has joined group \(group.name)"
+            : "\(userName) has declined invitation to \(group.name)"
+        
+        var update: [String: Any] = ["invitedIDs": FieldValue.arrayRemove([userID])]
+        if accept { update["memberIDs"] = FieldValue.arrayUnion([userID]) }
+        
+        let succeeded = await commit(update: update, text: text, group: group, userID: userID)
+        guard succeeded else { return }
+        await notifyOwner(of: group, kind: accept ? .groupJoined : .groupDeclined, text: text, userID: userID)
+    }
+    
+    func leave(_ group: FriendGroup, userID: String, userName: String) async {
+        let text = "\(userName) has left group \(group.name)"
+        let succeeded = await commit(
+            update: ["memberIDs": FieldValue.arrayRemove([userID])],
+            text: text,
+            group: group,
+            userID: userID
+        )
+        guard succeeded else { return }
+        await notifyOwner(of: group, kind: .groupLeft, text: text, userID: userID)
+    }
+    
+    // MARK: - Helpers
+    
+    private func commit(update: [String: Any], text: String, group: FriendGroup, userID: String) async -> Bool {
         let groupReference = database.collection(FriendGroup.collectionName).document(group.id)
         let activityReference = groupReference.collection("activity").document()
         
@@ -165,9 +192,31 @@ final class GroupStore: ObservableObject {
         
         do {
             try await batch.commit()
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
+    }
+    
+    private func notifyInvitees(_ ids: [String], groupName: String, ownerID: String) async {
+        guard !ids.isEmpty else { return }
+        let ownerName = NotificationWriter.actorName
+        let drafts = ids.map {
+            NotificationDraft(
+                recipientID: $0,
+                kind: .groupInvite,
+                title: "Group invitation",
+                body: "\(ownerName) invited you to \(groupName)"
+            )
+        }
+        await notifications.send(drafts, from: ownerID)
+    }
+    
+    private func notifyOwner(of group: FriendGroup, kind: NotificationKind, text: String, userID: String) async {
+        await notifications.send([
+            NotificationDraft(recipientID: group.ownerID, kind: kind, title: "Group update", body: text)
+        ], from: userID)
     }
     
     private func validatedName(_ name: String, excluding excludedID: String?) throws -> String {

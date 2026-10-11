@@ -16,10 +16,12 @@ final class HappStore: ObservableObject {
     @Published private(set) var errorMessage: String?
     
     private let database: Firestore
+    private let notifications: NotificationWriter
     private var listener: ListenerRegistration?
     
     init(database: Firestore = .firestore()) {
         self.database = database
+        self.notifications = NotificationWriter(database: database)
     }
     
     func startListening() {
@@ -37,8 +39,7 @@ final class HappStore: ObservableObject {
                         return
                     }
                     
-                    let documents = snapshot?.documents ?? []
-                    self.happs = documents
+                    self.happs = (snapshot?.documents ?? [])
                         .compactMap { try? $0.data(as: Happ.self) }
                         .sorted { $0.startTime < $1.startTime }
                 }
@@ -98,6 +99,13 @@ final class HappStore: ObservableObject {
         let data = try Firestore.Encoder().encode(happ)
         let reference = database.collection(Happ.collectionName).document()
         try await reference.setData(data)
+        
+        await notifyFriendsOfNewHapp(
+            title: cleanedTitle,
+            creatorID: creatorID,
+            creatorName: creatorName,
+            invitedIDs: invitedIDs
+        )
     }
     
     func toggleParticipation(happID: String, userID: String, isJoining: Bool) async throws {
@@ -106,5 +114,32 @@ final class HappStore: ObservableObject {
             "participantIDs": isJoining ? FieldValue.arrayUnion([userID]) : FieldValue.arrayRemove([userID])
         ]
         try await reference.updateData(update)
+        
+        guard let happ = happs.first(where: { $0.id == happID }) else { return }
+        let name = NotificationWriter.actorName
+        let draft = NotificationDraft(
+            recipientID: happ.creatorID,
+            kind: isJoining ? .happJoined : .happLeft,
+            title: isJoining ? "New attendee" : "Someone left",
+            body: isJoining ? "\(name) joined \(happ.title)" : "\(name) left \(happ.title)"
+        )
+        await notifications.send([draft], from: userID)
+    }
+    
+    private func notifyFriendsOfNewHapp(title: String, creatorID: String, creatorName: String, invitedIDs: [String]) async {
+        let snapshot = try? await database.collection("users").document(creatorID).getDocument()
+        let friendIDs = snapshot?.get("friendIDs") as? [String] ?? []
+        guard !friendIDs.isEmpty else { return }
+        
+        let drafts = friendIDs.map { friendID -> NotificationDraft in
+            let isInvited = invitedIDs.contains(friendID)
+            return NotificationDraft(
+                recipientID: friendID,
+                kind: .happCreated,
+                title: isInvited ? "You're invited" : "New Happ",
+                body: isInvited ? "\(creatorName) invited you to \(title)" : "\(creatorName) created \(title)"
+            )
+        }
+        await notifications.send(drafts, from: creatorID)
     }
 }

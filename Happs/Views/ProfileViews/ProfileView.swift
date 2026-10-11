@@ -10,51 +10,34 @@ import FirebaseAuth
 struct ProfileView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var profileStore: ProfileStore
+    @EnvironmentObject private var notificationStore: NotificationStore
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
     @ScaledMetric(relativeTo: .largeTitle) private var avatarSize: CGFloat = 80
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 28
     @State private var isPresentingEditor = false
+    @State private var isPresentingNotifications = false
     @State private var errorMessage: String?
+    
+    private var notificationsTitle: String {
+        let unread = notificationStore.unreadCount
+        return unread > 0 ? "Notifications (\(unread))" : "Notifications"
+    }
     
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-
                     header
-                    
-
                     invisibleModeCard
-
                     appearanceCard
-
-                    VStack(spacing: 10) {
-                        MenuRow(systemImage: "house.fill", title: "My Profile") {
-                            isPresentingEditor = true
-                        }
-
-                        MenuRow(systemImage: "bell.fill", title: "Notifications")
-                        MenuRow(systemImage: "calendar", title: "Schedule")
-                        MenuRow(systemImage: "square.and.pencil", title: "Preferences")
-                        MenuRow(systemImage: "line.3.horizontal", title: "Settings")
-                        MenuRow(systemImage: "info.circle.fill", title: "About Happs")
-                    }
-
-                    Button(role: .destructive, action: signOut) {
-                        Text("Sign Out")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .padding(.top, 10)
-
+                    menuRows
+                    signOutButton
                 }
                 .padding(20)
-                .padding(.bottom, 20)
             }
-            .scrollBounceBehavior(.basedOnSize)
             .navigationTitle("Me")
             .sheet(isPresented: $isPresentingEditor) { ProfileEditorView() }
+            .sheet(isPresented: $isPresentingNotifications) { NotificationsView() }
             .alert("Something Went Wrong", isPresented: errorIsPresented) {
                 Button("OK", role: .cancel) { errorMessage = nil }
             } message: {
@@ -66,7 +49,8 @@ struct ProfileView: View {
     private var header: some View {
         VStack(spacing: 6) {
             AvatarView(symbol: profileStore.profile?.avatarSymbol, size: avatarSize)
-            Text(authService.user?.displayName ?? "Happs User").font(.title2.bold())
+            Text(authService.user?.displayName ?? "Happs User")
+                .font(.title2.bold())
             
             Menu {
                 ForEach(UserStatus.allCases) { status in
@@ -74,7 +58,9 @@ struct ProfileView: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Circle().fill(profileStore.profile?.status.color ?? UserStatus.available.color).frame(width: 8, height: 8)
+                    Circle()
+                        .fill(profileStore.profile?.status.color ?? UserStatus.available.color)
+                        .frame(width: 8, height: 8)
                     Text(profileStore.profile?.status.rawValue ?? "Available")
                     Image(systemName: "chevron.down").font(.caption2)
                 }
@@ -88,7 +74,8 @@ struct ProfileView: View {
             Toggle("", isOn: Binding(
                 get: { profileStore.profile?.isVisible == false },
                 set: { setInvisible($0) }
-            )).labelsHidden()
+            ))
+            .labelsHidden()
             Text("Invisible Mode")
             Spacer()
         }
@@ -108,6 +95,25 @@ struct ProfileView: View {
         }
         .padding(14)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+    }
+    
+    private var menuRows: some View {
+        VStack(spacing: 10) {
+            MenuRow(systemImage: "house.fill", title: "My Profile") { isPresentingEditor = true }
+            MenuRow(systemImage: "bell.fill", title: notificationsTitle) { isPresentingNotifications = true }
+            MenuRow(systemImage: "calendar", title: "Schedule")
+            MenuRow(systemImage: "square.and.pencil", title: "Preferences")
+            MenuRow(systemImage: "line.3.horizontal", title: "Settings")
+        }
+    }
+    
+    private var signOutButton: some View {
+        Button(role: .destructive, action: signOut) {
+            Text("Sign Out").frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .padding(.top, 10)
     }
     
     private var errorIsPresented: Binding<Bool> {
