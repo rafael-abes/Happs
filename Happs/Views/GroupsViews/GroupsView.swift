@@ -5,45 +5,56 @@
 //  Created by Rafa Abes on 10/10/26.
 //
 import SwiftUI
+import FirebaseAuth
 
 struct GroupsView: View {
+    @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var groupStore: GroupStore
-    @EnvironmentObject private var friendStore: FriendStore
-    @Environment(\.dismiss) private var dismiss
     
-    @State private var editingGroup: FriendGroup?
     @State private var isPresentingNew = false
     
+    private var allIDs: [String] {
+        (groupStore.groups + groupStore.invitations).flatMap { $0.memberIDs + $0.invitedIDs }
+    }
+    
     var body: some View {
-        NavigationStack {
-            List {
+        List {
+            if !groupStore.invitations.isEmpty {
+                Section("Invitations") {
+                    ForEach(groupStore.invitations) { group in
+                        invitationRow(group)
+                    }
+                }
+            }
+            
+            Section("My Groups") {
                 if groupStore.groups.isEmpty {
-                    Text("No groups yet. Tap + to make one.")
+                    Text("You're not in any groups yet. Tap + to make one.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(groupStore.groups) { group in
-                        groupRow(group)
+                        NavigationLink {
+                            GroupDetailView(groupID: group.id)
+                        } label: {
+                            groupRow(group)
+                        }
                     }
-                    .onDelete(perform: deleteGroups)
                 }
             }
-            .navigationTitle("Groups")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button("New Group", systemImage: "plus") { isPresentingNew = true }
-                }
+        }
+        .navigationTitle("Groups")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("New Group", systemImage: "plus") { isPresentingNew = true }
             }
-            .sheet(isPresented: $isPresentingNew) { GroupEditorView(group: nil) }
-            .sheet(item: $editingGroup) { group in GroupEditorView(group: group) }
-            .alert("Group Error", isPresented: errorIsPresented) {
-                Button("OK", role: .cancel) { groupStore.clearError() }
-            } message: {
-                Text(groupStore.errorMessage ?? "Please try again.")
-            }
+        }
+        .task(id: allIDs) { await groupStore.resolveNames(for: allIDs) }
+        .sheet(isPresented: $isPresentingNew) { GroupEditorView(group: nil) }
+        .alert("Group Error", isPresented: errorIsPresented) {
+            Button("OK", role: .cancel) { groupStore.clearError() }
+        } message: {
+            Text(groupStore.errorMessage ?? "Please try again.")
         }
     }
     
@@ -52,31 +63,62 @@ struct GroupsView: View {
     }
     
     private func groupRow(_ group: FriendGroup) -> some View {
-        Button { editingGroup = group } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(group.name)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Text(memberSummary(for: group))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(group.name).font(.headline)
+                if group.ownerID == authService.user?.uid {
+                    Text("Owner").font(.caption).foregroundStyle(.green)
+                }
+            }
+            Text("\(group.memberIDs.count) member\(group.memberIDs.count == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+    
+    @ViewBuilder
+    private func invitationRow(_ group: FriendGroup) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                invitationText(group)
+                Spacer()
+                invitationButtons(group)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                invitationText(group)
+                invitationButtons(group)
             }
         }
     }
     
-    private func memberSummary(for group: FriendGroup) -> String {
-        let names = friendStore.friends
-            .filter { group.memberIDs.contains($0.id) }
-            .map(\.displayName)
-        return names.isEmpty ? "No members" : names.joined(separator: ", ")
+    private func invitationText(_ group: FriendGroup) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(group.name).font(.headline)
+            Text("From \(groupStore.name(for: group.ownerID))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
     
-    private func deleteGroups(at offsets: IndexSet) {
-        let doomed = offsets.map { groupStore.groups[$0] }
+    private func invitationButtons(_ group: FriendGroup) -> some View {
+        HStack {
+            Button("Accept") { respond(group, accept: true) }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+            Button("Decline") { respond(group, accept: false) }
+                .buttonStyle(.bordered)
+        }
+    }
+    
+    private func respond(_ group: FriendGroup, accept: Bool) {
+        guard let user = authService.user else { return }
         Task {
-            for group in doomed {
-                await groupStore.deleteGroup(group)
-            }
+            await groupStore.respond(
+                to: group,
+                accept: accept,
+                userID: user.uid,
+                userName: user.displayName ?? "Someone"
+            )
         }
     }
 }

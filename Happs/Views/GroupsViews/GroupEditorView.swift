@@ -23,7 +23,8 @@ struct GroupEditorView: View {
     init(group: FriendGroup?) {
         self.group = group
         _name = State(initialValue: group?.name ?? "")
-        _selectedIDs = State(initialValue: Set(group?.memberIDs ?? []))
+        let existing = (group?.memberIDs ?? []).filter { $0 != group?.ownerID } + (group?.invitedIDs ?? [])
+        _selectedIDs = State(initialValue: Set(existing))
     }
     
     var body: some View {
@@ -33,15 +34,19 @@ struct GroupEditorView: View {
                     TextField("e.g. Badminton crew", text: $name)
                 }
                 
-                Section("Members") {
+                Section {
                     if friendStore.friends.isEmpty {
                         Text("Add some friends first, then you can group them.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(friendStore.friends) { friend in
-                            memberRow(friend)
+                            friendRow(friend)
                         }
                     }
+                } header: {
+                    Text("Friends")
+                } footer: {
+                    Text("Friends you pick get an invitation they can accept or decline.")
                 }
             }
             .navigationTitle(group == nil ? "New Group" : "Edit Group")
@@ -51,7 +56,7 @@ struct GroupEditorView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }.disabled(isSaving)
+                    Button(group == nil ? "Send Invites" : "Save") { save() }.disabled(isSaving)
                 }
             }
             .interactiveDismissDisabled(isSaving)
@@ -67,16 +72,25 @@ struct GroupEditorView: View {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
     
-    private func memberRow(_ friend: UserProfile) -> some View {
+    private func stateLabel(for friend: UserProfile) -> String? {
+        if group?.memberIDs.contains(friend.id) == true { return "Member" }
+        if group?.invitedIDs.contains(friend.id) == true { return "Invited" }
+        return nil
+    }
+    
+    private func friendRow(_ friend: UserProfile) -> some View {
         Button { toggle(friend.id) } label: {
             HStack {
-                Text(friend.displayName).foregroundStyle(.primary)
-                Spacer()
-                if selectedIDs.contains(friend.id) {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                } else {
-                    Image(systemName: "circle").foregroundStyle(.secondary)
+                AvatarView(symbol: friend.avatarSymbol, size: 32)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(friend.displayName).foregroundStyle(.primary)
+                    if let label = stateLabel(for: friend) {
+                        Text(label).font(.caption).foregroundStyle(.secondary)
+                    }
                 }
+                Spacer()
+                Image(systemName: selectedIDs.contains(friend.id) ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selectedIDs.contains(friend.id) ? Color.green : Color.secondary)
             }
         }
     }
@@ -99,9 +113,9 @@ struct GroupEditorView: View {
             defer { isSaving = false }
             do {
                 if let group {
-                    try await groupStore.updateGroup(group, name: name, memberIDs: Array(selectedIDs))
+                    try await groupStore.updateGroup(group, name: name, selectedIDs: selectedIDs)
                 } else {
-                    try await groupStore.createGroup(name: name, ownerID: userID, memberIDs: Array(selectedIDs))
+                    try await groupStore.createGroup(name: name, ownerID: userID, inviteIDs: Array(selectedIDs))
                 }
                 dismiss()
             } catch {

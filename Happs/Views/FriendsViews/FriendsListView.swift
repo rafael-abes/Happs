@@ -8,8 +8,8 @@ import SwiftUI
 
 struct FriendsListView: View {
     @EnvironmentObject private var friendStore: FriendStore
+    @EnvironmentObject private var groupStore: GroupStore
     @State private var isPresentingAddFriends = false
-    @State private var isPresentingGroups = false
     @State private var showsMap = false
     
     var body: some View {
@@ -28,13 +28,11 @@ struct FriendsListView: View {
                         showsMap.toggle()
                     }
                 }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Groups", systemImage: "person.3") { isPresentingGroups = true }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("Add Friends", systemImage: "plus") { isPresentingAddFriends = true }
                 }
             }
             .sheet(isPresented: $isPresentingAddFriends) { AddFriendsView() }
-            .sheet(isPresented: $isPresentingGroups) { GroupsView() }
             .alert("Database Error", isPresented: errorIsPresented) {
                 Button("OK", role: .cancel) { friendStore.clearError() }
             } message: {
@@ -45,6 +43,14 @@ struct FriendsListView: View {
     
     private var friendsList: some View {
         List {
+            Section {
+                NavigationLink {
+                    GroupsView()
+                } label: {
+                    groupsRow
+                }
+            }
+            
             if !friendStore.incomingRequests.isEmpty {
                 Section("Requests") {
                     ForEach(friendStore.incomingRequests) { request in
@@ -66,11 +72,27 @@ struct FriendsListView: View {
         }
     }
     
+    private var groupsRow: some View {
+        HStack {
+            Label("Groups", systemImage: "person.3.fill")
+            Spacer()
+            if groupStore.invitations.isEmpty {
+                Text("\(groupStore.groups.count)")
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("\(groupStore.invitations.count) new")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(.red, in: Capsule())
+            }
+        }
+    }
+    
     private func friendRow(_ friend: UserProfile) -> some View {
         HStack {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.title2)
-                .foregroundStyle(.secondary)
+            AvatarView(symbol: friend.avatarSymbol, size: 36, ringColor: friend.isVisible ? friend.status.color : nil)
             Text(friend.displayName)
             Spacer()
             statusLabel(for: friend)
