@@ -69,6 +69,9 @@ private struct AuthenticatedRootView: View {
                 locationService.stopSharing()
             }
         }
+        .onChange(of: locationService.isPublishedOnCampus) { _, allowed in
+            friendStore.setLocationAccess(allowed)
+        }
     }
 }
 

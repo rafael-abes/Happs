@@ -24,6 +24,11 @@ final class FriendStore: ObservableObject {
     private var locationListeners: [ListenerRegistration] = []
     private var watchedFriendIDs: [String]?
     private var profilesByID: [String: UserProfile] = [:]
+    private var hasLocationAccess = false
+    
+    /// Smaller than the friend chunk: the location rule makes one lookup per friend
+    /// plus one for the viewer, and Firestore caps rule lookups at 10 per query.
+    private static let locationChunkSize = 8
     
     init(database: Firestore = .firestore()) {
         self.database = database
@@ -57,7 +62,9 @@ final class FriendStore: ObservableObject {
                           profile.friendIDs != self.watchedFriendIDs else { return }
                     self.watchedFriendIDs = profile.friendIDs
                     self.watchFriends(ids: profile.friendIDs)
-                    self.watchLocations(ids: profile.friendIDs)
+                    if self.hasLocationAccess {
+                        self.watchLocations(ids: profile.friendIDs)
+                    }
                 }
             }
     }
@@ -69,12 +76,11 @@ final class FriendStore: ObservableObject {
         profileListener = nil
         friendListeners.forEach { $0.remove() }
         friendListeners = []
-        locationListeners.forEach { $0.remove() }
-        locationListeners = []
+        stopWatchingLocations()
+        hasLocationAccess = false
         watchedFriendIDs = nil
         profilesByID = [:]
         friends = []
-        friendLocations = [:]
         incomingRequests = []
     }
     
@@ -82,10 +88,21 @@ final class FriendStore: ObservableObject {
         errorMessage = nil
     }
     
+    /// Friend locations are only listened to while the viewer is confirmed on campus.
+    func setLocationAccess(_ allowed: Bool) {
+        guard allowed != hasLocationAccess else { return }
+        hasLocationAccess = allowed
+        if allowed {
+            watchLocations(ids: watchedFriendIDs ?? [])
+        } else {
+            stopWatchingLocations()
+        }
+    }
+    
     // MARK: - Listeners
     
-    private static func chunks(of ids: [String]) -> [[String]] {
-        stride(from: 0, to: ids.count, by: 10).map { Array(ids[$0..<min($0 + 10, ids.count)]) }
+    private static func chunks(of ids: [String], size: Int) -> [[String]] {
+        stride(from: 0, to: ids.count, by: size).map { Array(ids[$0..<min($0 + size, ids.count)]) }
     }
     
     private func watchFriends(ids: [String]) {
@@ -97,7 +114,7 @@ final class FriendStore: ObservableObject {
             return
         }
         
-        for chunk in Self.chunks(of: ids) {
+        for chunk in Self.chunks(of: ids, size: 10) {
             let listener = database.collection("users")
                 .whereField(FieldPath.documentID(), in: chunk)
                 .addSnapshotListener { [weak self] snapshot, error in
@@ -122,17 +139,20 @@ final class FriendStore: ObservableObject {
     }
     
     private func watchLocations(ids: [String]) {
-        locationListeners.forEach { $0.remove() }
-        locationListeners = []
-        friendLocations = [:]
+        stopWatchingLocations()
         guard !ids.isEmpty else { return }
         
-        for chunk in Self.chunks(of: ids) {
+        for chunk in Self.chunks(of: ids, size: Self.locationChunkSize) {
             let listener = database.collection("liveLocations")
                 .whereField(FieldPath.documentID(), in: chunk)
-                .addSnapshotListener { [weak self] snapshot, _ in
+                .addSnapshotListener { [weak self] snapshot, error in
                     Task { @MainActor in
                         guard let self else { return }
+                        if error != nil {
+                            // The rule denies this read once the viewer is off campus.
+                            self.friendLocations = [:]
+                            return
+                        }
                         let documents = snapshot?.documents ?? []
                         let present = Set(documents.map { $0.documentID })
                         for id in chunk where !present.contains(id) {
@@ -147,6 +167,12 @@ final class FriendStore: ObservableObject {
                 }
             locationListeners.append(listener)
         }
+    }
+    
+    private func stopWatchingLocations() {
+        locationListeners.forEach { $0.remove() }
+        locationListeners = []
+        friendLocations = [:]
     }
     
     // MARK: - Search and requests

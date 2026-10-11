@@ -8,9 +8,11 @@
 import SwiftUI
 import MapKit
 
-
 struct FriendsMapView: View {
     @EnvironmentObject private var friendStore: FriendStore
+    @EnvironmentObject private var happStore: HappStore
+    @EnvironmentObject private var locationService: LocationService
+    
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .region(LocationService.campusRegion))
     @State private var selectedFriendID: String?
     
@@ -20,6 +22,14 @@ struct FriendsMapView: View {
     }
     
     var body: some View {
+        if locationService.campusAccess == .inside {
+            liveMap
+        } else {
+            CampusLockedView(access: locationService.campusAccess, happs: happStore.happs)
+        }
+    }
+    
+    private var liveMap: some View {
         Map(position: $cameraPosition) {
             UserAnnotation()
             

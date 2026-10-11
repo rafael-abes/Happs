@@ -13,11 +13,14 @@ import Combine
 final class LocationService: NSObject, ObservableObject {
     @Published private(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published private(set) var isInsideCampus = false
+    /// True only once the server has acknowledged this user's on-campus location document.
+    @Published private(set) var isPublishedOnCampus = false
     @Published private(set) var currentCoordinate: CLLocationCoordinate2D?
     
     private let manager = CLLocationManager()
     private let database = Firestore.firestore()
     private var currentUserID: String?
+    private var hasClearedOutside = false
     
     static let campusBoundary: [CLLocationCoordinate2D] = [
         CLLocationCoordinate2D(latitude: -37.90670054042203, longitude: 145.14179024978608),
@@ -33,20 +36,36 @@ final class LocationService: NSObject, ObservableObject {
         manager.distanceFilter = 15
     }
     
-    func requestPermission() { manager.requestWhenInUseAuthorization() }
-    func startSharing(userID: String) { currentUserID = userID; manager.startUpdatingLocation() }
-    func stopSharing() { currentUserID = nil; manager.stopUpdatingLocation() }
+    func requestPermission() {
+        manager.requestWhenInUseAuthorization()
+    }
     
-    /// Writes continuously while on campus, regardless of visibility. Whether a
-    /// friend can actually *read* this document is now entirely a Firestore
-    /// rules decision (see liveLocations rule), not a client-side one, this is
-    /// what makes it an actual security boundary rather than good-faith behavior.
+    func startSharing(userID: String) {
+        currentUserID = userID
+        hasClearedOutside = false
+        isPublishedOnCampus = false
+        manager.startUpdatingLocation()
+    }
+    
+    func stopSharing() {
+        currentUserID = nil
+        isPublishedOnCampus = false
+        manager.stopUpdatingLocation()
+    }
+    
+    /// Call before signing out, while the user is still authenticated, so no ghost pin stays behind.
+    func clearLiveLocation(for userID: String) async {
+        stopSharing()
+        try? await database.collection("liveLocations").document(userID).delete()
+    }
+    
     private func handle(_ coordinate: CLLocationCoordinate2D) {
         currentCoordinate = coordinate
-        isInsideCampus = Self.isInside(coordinate, polygon: Self.campusBoundary)
-        guard let userID = currentUserID else { return }
+        let inside = Self.isInside(coordinate, polygon: Self.campusBoundary)
+        if inside != isInsideCampus { isInsideCampus = inside }
         
-        if isInsideCampus {
+        guard let userID = currentUserID else { return }
+        if inside {
             publishLocation(coordinate, userID: userID)
         } else {
             removeLocation(userID: userID)
@@ -54,15 +73,28 @@ final class LocationService: NSObject, ObservableObject {
     }
     
     private func publishLocation(_ coordinate: CLLocationCoordinate2D, userID: String) {
-        try? database.collection("liveLocations").document(userID).setData([
+        hasClearedOutside = false
+        database.collection("liveLocations").document(userID).setData([
             "latitude": coordinate.latitude,
             "longitude": coordinate.longitude,
             "updatedAt": FieldValue.serverTimestamp()
-        ])
+        ]) { [weak self] error in
+            guard error == nil else { return }
+            Task { @MainActor in
+                guard let self, self.isInsideCampus, !self.isPublishedOnCampus else { return }
+                self.isPublishedOnCampus = true
+            }
+        }
     }
     
     private func removeLocation(userID: String) {
-        try? database.collection("liveLocations").document(userID).delete()
+        isPublishedOnCampus = false
+        guard !hasClearedOutside else { return }
+        hasClearedOutside = true
+        database.collection("liveLocations").document(userID).delete { [weak self] error in
+            guard error != nil else { return }
+            Task { @MainActor in self?.hasClearedOutside = false }
+        }
     }
     
     private static func isInside(_ point: CLLocationCoordinate2D, polygon: [CLLocationCoordinate2D]) -> Bool {
@@ -86,6 +118,7 @@ extension LocationService: CLLocationManagerDelegate {
         guard let coordinate = locations.last?.coordinate else { return }
         Task { @MainActor in self.handle(coordinate) }
     }
+    
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in self.authorizationStatus = manager.authorizationStatus }
     }

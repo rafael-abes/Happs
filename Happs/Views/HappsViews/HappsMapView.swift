@@ -26,6 +26,7 @@ struct HappsMapView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
     @EnvironmentObject private var friendStore: FriendStore
+    @EnvironmentObject private var locationService: LocationService
     
     @State private var mode = LayerMode.all
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .region(LocationService.campusRegion))
@@ -34,6 +35,7 @@ struct HappsMapView: View {
     @State private var isJoining = false
     @State private var errorMessage: String?
     
+    private var access: CampusAccess { locationService.campusAccess }
     private var showsHapps: Bool { mode != .friends }
     private var showsFriends: Bool { mode != .happs }
     
@@ -66,6 +68,14 @@ struct HappsMapView: View {
     }
     
     var body: some View {
+        if access == .inside {
+            liveMap
+        } else {
+            CampusLockedView(access: access, happs: happStore.happs)
+        }
+    }
+    
+    private var liveMap: some View {
         Map(position: $cameraPosition) {
             UserAnnotation()
             

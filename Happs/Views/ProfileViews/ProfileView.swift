@@ -11,6 +11,7 @@ struct ProfileView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var profileStore: ProfileStore
     @EnvironmentObject private var notificationStore: NotificationStore
+    @EnvironmentObject private var locationService: LocationService
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
     @ScaledMetric(relativeTo: .largeTitle) private var avatarSize: CGFloat = 80
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 28
@@ -137,6 +138,10 @@ struct ProfileView: View {
     }
     
     private func signOut() {
-        do { try authService.signOut() } catch { errorMessage = error.localizedDescription }
+        guard let userID = authService.user?.uid else { return }
+        Task {
+            await locationService.clearLiveLocation(for: userID)
+            do { try authService.signOut() } catch { errorMessage = error.localizedDescription }
+        }
     }
 }
