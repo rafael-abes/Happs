@@ -22,14 +22,19 @@ final class AuthService: ObservableObject {
     private let auth: Auth
     private let database: Firestore
     private var authListener: AuthStateDidChangeListenerHandle?
+    private var isCreatingAccount = false
     
     init(auth: Auth = .auth(), database: Firestore = .firestore()) {
         self.auth = auth
         self.database = database
         authListener = auth.addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor in
-                self?.user = user
-                self?.isCheckingAuthentication = false
+                guard let self else { return }
+                self.user = user
+                self.isCheckingAuthentication = false
+                if let user {
+                    await self.syncProfile(for: user)
+                }
             }
         }
     }
@@ -55,6 +60,9 @@ final class AuthService: ObservableObject {
         guard password.count >= 6 else {
             throw AppError.invalidForm("The password must contain at least six characters.")
         }
+        
+        isCreatingAccount = true
+        defer { isCreatingAccount = false }
         
         let result = try await auth.createUser(withEmail: cleanedEmail, password: password)
         let request = result.user.createProfileChangeRequest()
@@ -93,8 +101,8 @@ final class AuthService: ObservableObject {
             withIDToken: idToken,
             accessToken: result.user.accessToken.tokenString
         )
-        let authResult = try await auth.signIn(with: credential)
-        try await ensureProfileExists(for: authResult.user, fallbackDisplayName: result.user.profile?.name ?? "")
+        _ = try await auth.signIn(with: credential)
+        // The profile is created or repaired by `syncProfile` from the auth listener.
     }
     
     func updateDisplayName(_ name: String) async throws {
@@ -114,32 +122,77 @@ final class AuthService: ObservableObject {
         try auth.signOut()
     }
     
+    // MARK: - Profile upkeep
+    
+    /// Runs on every sign-in, for every provider. Creates a missing profile, fills in any
+    /// missing fields without touching existing ones, and keeps the search entry current.
+    private func syncProfile(for user: FirebaseAuth.User) async {
+        guard !isCreatingAccount else { return }
+        
+        let reference = database.collection("users").document(user.uid)
+        do {
+            let snapshot = try await reference.getDocument()
+            let authName = Self.resolvedName(for: user)
+            var profileName = authName
+            
+            if let data = snapshot.data() {
+                profileName = (data["displayName"] as? String) ?? authName
+                
+                var missing: [String: Any] = [:]
+                if data["displayName"] == nil { missing["displayName"] = authName }
+                if data["email"] == nil { missing["email"] = user.email ?? "" }
+                if data["status"] == nil { missing["status"] = UserStatus.available.rawValue }
+                if data["isVisible"] == nil { missing["isVisible"] = true }
+                if data["friendIDs"] == nil { missing["friendIDs"] = [String]() }
+                if !missing.isEmpty {
+                    try await reference.updateData(missing)
+                }
+            } else {
+                let profile = UserProfile(
+                    id: user.uid,
+                    displayName: authName,
+                    email: user.email ?? "",
+                    phoneNumber: user.phoneNumber
+                )
+                try await reference.setData(profile.creationData)
+            }
+            
+            let indexReference = database.collection(UserSearchEntry.collectionName).document(user.uid)
+            let index = try await indexReference.getDocument()
+            let expectedKey = UserSearchEntry.searchKey(for: profileName)
+            let storedKey = index.get("searchKey") as? String
+            let storedName = index.get("displayName") as? String
+            if storedKey != expectedKey || storedName != profileName {
+                try await indexReference.setData(["displayName": profileName, "searchKey": expectedKey])
+            }
+        } catch {
+            #if DEBUG
+            print("Profile sync failed: \(error)")
+            #endif
+        }
+    }
+    
+    private func writeSearchIndex(userID: String, displayName: String) async throws {
+        try await database.collection(UserSearchEntry.collectionName).document(userID).setData([
+            "displayName": displayName,
+            "searchKey": UserSearchEntry.searchKey(for: displayName)
+        ])
+    }
+    
+    private static func resolvedName(for user: FirebaseAuth.User) -> String {
+        if let name = user.displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            return name
+        }
+        if let prefix = user.email?.split(separator: "@").first, !prefix.isEmpty {
+            return String(prefix)
+        }
+        return "New Happs User"
+    }
+    
     private static func topViewController() -> UIViewController? {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first?.windows
             .first(where: \.isKeyWindow)?.rootViewController
-    }
-    
-    private func ensureProfileExists(for user: FirebaseAuth.User, fallbackDisplayName: String) async throws {
-        let reference = database.collection("users").document(user.uid)
-        let snapshot = try await reference.getDocument()
-        guard snapshot.exists == false else { return }
-        
-        let cleanedName = fallbackDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let profile = UserProfile(
-            id: user.uid,
-            displayName: cleanedName.isEmpty ? "New Happs User" : cleanedName,
-            email: user.email ?? "",
-            phoneNumber: user.phoneNumber
-        )
-        try await reference.setData(profile.creationData)
-        try await writeSearchIndex(userID: user.uid, displayName: profile.displayName)
-    }
-    
-    private func writeSearchIndex(userID: String, displayName: String) async throws {
-        try await database.collection(UserSearchEntry.collectionName).document(userID).setData([
-            "displayName": displayName
-        ])
     }
 }

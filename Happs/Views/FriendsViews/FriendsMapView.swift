@@ -13,7 +13,7 @@ struct FriendsMapView: View {
     @EnvironmentObject private var happStore: HappStore
     @EnvironmentObject private var locationService: LocationService
     
-    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .region(LocationService.campusRegion))
+    @State private var cameraPosition: MapCameraPosition = .region(LocationService.campusRegion)
     @State private var selectedFriendID: String?
     
     private var selectedFriend: UserProfile? {
@@ -25,7 +25,11 @@ struct FriendsMapView: View {
         if locationService.campusAccess == .inside {
             liveMap
         } else {
-            CampusLockedView(access: locationService.campusAccess, happs: happStore.happs)
+            CampusLockedView(
+                access: locationService.campusAccess,
+                happs: happStore.happs,
+                onlineFriends: friendStore.onlineFriends
+            )
         }
     }
     
@@ -43,6 +47,7 @@ struct FriendsMapView: View {
             MapUserLocationButton()
             MapCompass()
         }
+        .onAppear(perform: centerCamera)
         .safeAreaInset(edge: .bottom) {
             if let friend = selectedFriend {
                 FriendCard(friend: friend, onClose: { selectedFriendID = nil })
@@ -65,6 +70,16 @@ struct FriendsMapView: View {
                 }
                 .annotationTitles(.hidden)
             }
+        }
+    }
+    
+    private func centerCamera() {
+        if let coordinate = locationService.currentCoordinate {
+            cameraPosition = .region(
+                MKCoordinateRegion(center: coordinate, latitudinalMeters: 600, longitudinalMeters: 600)
+            )
+        } else {
+            cameraPosition = .region(LocationService.campusRegion)
         }
     }
 }

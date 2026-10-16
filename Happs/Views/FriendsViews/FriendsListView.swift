@@ -5,12 +5,16 @@
 //  Created by Rafa Abes on 10/2/26.
 //
 import SwiftUI
+import FirebaseAuth
 
 struct FriendsListView: View {
+    @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var friendStore: FriendStore
     @EnvironmentObject private var groupStore: GroupStore
+    
     @State private var isPresentingAddFriends = false
     @State private var showsMap = false
+    @State private var friendPendingRemoval: UserProfile?
     
     var body: some View {
         NavigationStack {
@@ -33,6 +37,17 @@ struct FriendsListView: View {
                 }
             }
             .sheet(isPresented: $isPresentingAddFriends) { AddFriendsView() }
+            .confirmationDialog(
+                "Remove friend?",
+                isPresented: removalIsPresented,
+                titleVisibility: .visible,
+                presenting: friendPendingRemoval
+            ) { friend in
+                Button("Remove \(friend.displayName)", role: .destructive) { remove(friend) }
+                Button("Cancel", role: .cancel) { }
+            } message: { _ in
+                Text("You'll stop seeing each other's status and location. You can send a new request later.")
+            }
             .alert("Database Error", isPresented: errorIsPresented) {
                 Button("OK", role: .cancel) { friendStore.clearError() }
             } message: {
@@ -93,13 +108,22 @@ struct FriendsListView: View {
     private func friendRow(_ friend: UserProfile) -> some View {
         HStack {
             AvatarView(symbol: friend.avatarSymbol, size: 36, ringColor: friend.isVisible ? friend.status.color : nil)
-            Text(friend.displayName)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(friend.displayName)
+                if friend.isVisible && (friend.isOnCampus ?? false) {
+                    Label("On campus", systemImage: "location.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.green)
+                }
+            }
             Spacer()
             statusLabel(for: friend)
         }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button("Remove", role: .destructive) { friendPendingRemoval = friend }
+        }
     }
     
-    @ViewBuilder
     private func requestRow(_ request: FriendRequest) -> some View {
         ResponseRow(
             title: request.fromDisplayName,
@@ -107,6 +131,10 @@ struct FriendsListView: View {
             onAccept: { respond(request, accept: true) },
             onDecline: { respond(request, accept: false) }
         )
+    }
+    
+    private var removalIsPresented: Binding<Bool> {
+        Binding(get: { friendPendingRemoval != nil }, set: { if !$0 { friendPendingRemoval = nil } })
     }
     
     private var errorIsPresented: Binding<Bool> {
@@ -129,5 +157,10 @@ struct FriendsListView: View {
             if accept { try? await friendStore.acceptRequest(request) }
             else { try? await friendStore.declineRequest(request) }
         }
+    }
+    
+    private func remove(_ friend: UserProfile) {
+        guard let userID = authService.user?.uid else { return }
+        Task { await friendStore.removeFriend(friend.id, currentUserID: userID) }
     }
 }
