@@ -21,11 +21,18 @@ struct Happ: Codable, Identifiable {
     let creatorID: String
     let creatorName: String
     let startTime: Date
+    let endTime: Date?
     let latitude: Double?
     let longitude: Double?
+    let isOffCampus: Bool?
     @ServerTimestamp var createdAt: Date?
     
     var id: String { documentID ?? "" }
+    
+    /// A pin belongs on the campus map only when it has a spot and isn't off campus.
+    var showsOnMap: Bool {
+        coordinate != nil && isOffCampus != true
+    }
     
     init(
         title: String,
@@ -36,8 +43,10 @@ struct Happ: Codable, Identifiable {
         creatorID: String,
         creatorName: String,
         startTime: Date,
+        endTime: Date? = nil,
         latitude: Double? = nil,
         longitude: Double? = nil,
+        isOffCampus: Bool? = nil,
         invitedIDs: [String]? = nil
     ) {
         self.title = title
@@ -48,8 +57,10 @@ struct Happ: Codable, Identifiable {
         self.creatorID = creatorID
         self.creatorName = creatorName
         self.startTime = startTime
+        self.endTime = endTime
         self.latitude = latitude
         self.longitude = longitude
+        self.isOffCampus = isOffCampus
         self.invitedIDs = invitedIDs
         self.createdAt = nil
     }

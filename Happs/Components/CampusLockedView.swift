@@ -27,9 +27,12 @@ extension LocationService {
 struct CampusLockedView: View {
     let access: CampusAccess
     let happs: [Happ]
+    let onlineFriends: [UserProfile]
+    
+    @State private var now = Date()
     
     private var activeCount: Int {
-        happs.filter { $0.isActiveNow }.count
+        happs.filter { $0.isActive(at: now) }.count
     }
     
     private var headline: String {
@@ -54,6 +57,7 @@ struct CampusLockedView: View {
             blurredCampus
             card
         }
+        .expiryClock($now, boundaries: happs.clockBoundaries)
     }
     
     private var blurredCampus: some View {
@@ -84,9 +88,28 @@ struct CampusLockedView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            friendsOnline
         }
         .padding(24)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .padding(32)
+    }
+    
+    @ViewBuilder
+    private var friendsOnline: some View {
+        if access != .locating && !onlineFriends.isEmpty {
+            VStack(spacing: 6) {
+                HStack(spacing: -8) {
+                    ForEach(onlineFriends.prefix(5)) { friend in
+                        AvatarView(symbol: friend.avatarSymbol, size: 30, ringColor: Color(.systemBackground))
+                    }
+                }
+                Text(onlineFriends.count == 1
+                     ? "1 friend is on campus now"
+                     : "\(onlineFriends.count) friends are on campus now")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .padding(.top, 4)
+        }
     }
 }
