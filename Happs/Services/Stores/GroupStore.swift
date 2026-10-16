@@ -146,9 +146,21 @@ final class GroupStore: ObservableObject {
             try await database.collection(FriendGroup.collectionName).document(group.id).delete()
         } catch {
             errorMessage = error.localizedDescription
+            return
         }
+        
+        let recipients = Set(group.memberIDs + group.invitedIDs).subtracting([group.ownerID])
+        let ownerName = NotificationWriter.actorName
+        let drafts = recipients.map {
+            NotificationDraft(
+                recipientID: $0,
+                kind: .groupDeleted,
+                title: "Group deleted",
+                body: "\(ownerName) deleted the group \(group.name)"
+            )
+        }
+        await notifications.send(drafts, from: group.ownerID)
     }
-    
     // MARK: - Responding to invites
     
     func respond(to group: FriendGroup, accept: Bool, userID: String, userName: String) async {

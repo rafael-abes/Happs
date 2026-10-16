@@ -10,6 +10,10 @@ import SwiftUI
 import FirebaseAuth
 
 struct GroupDetailView: View {
+    private enum PendingAction {
+        case leave, delete
+    }
+    
     let groupID: String
     
     @EnvironmentObject private var authService: AuthService
@@ -17,7 +21,7 @@ struct GroupDetailView: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var isEditing = false
-    @State private var isConfirmingDelete = false
+    @State private var pendingAction: PendingAction?
     
     private var group: FriendGroup? {
         groupStore.groups.first { $0.id == groupID }
@@ -65,10 +69,29 @@ struct GroupDetailView: View {
             }
         }
         .sheet(isPresented: $isEditing) { GroupEditorView(group: group) }
-        .confirmationDialog("Delete this group?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) { delete(group) }
+        .confirmationDialog(
+            pendingAction == .delete ? "Delete this group?" : "Leave this group?",
+            isPresented: pendingIsPresented,
+            titleVisibility: .visible,
+            presenting: pendingAction
+        ) { action in
+            switch action {
+            case .delete:
+                Button("Delete Group", role: .destructive) { delete(group) }
+            case .leave:
+                Button("Leave Group", role: .destructive) { leave(group) }
+            }
             Button("Cancel", role: .cancel) { }
+        } message: { action in
+            switch action {
+            case .delete: Text("Everyone in it is told, and it can't be undone.")
+            case .leave: Text("You'll need a new invite to rejoin.")
+            }
         }
+    }
+    
+    private var pendingIsPresented: Binding<Bool> {
+        Binding(get: { pendingAction != nil }, set: { if !$0 { pendingAction = nil } })
     }
     
     private func membersSection(_ group: FriendGroup) -> some View {
@@ -119,9 +142,9 @@ struct GroupDetailView: View {
     private func actionsSection(_ group: FriendGroup) -> some View {
         Section {
             if group.ownerID == currentUserID {
-                Button("Delete Group", role: .destructive) { isConfirmingDelete = true }
+                Button("Delete Group", role: .destructive) { pendingAction = .delete }
             } else {
-                Button("Leave Group", role: .destructive) { leave(group) }
+                Button("Leave Group", role: .destructive) { pendingAction = .leave }
             }
         }
     }

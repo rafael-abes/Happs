@@ -14,6 +14,7 @@ enum NotificationKind: String, Codable {
     case groupJoined
     case groupDeclined
     case groupLeft
+    case groupDeleted
     case happCreated
     case happJoined
     case happLeft
@@ -24,6 +25,7 @@ enum NotificationKind: String, Codable {
         switch self {
         case .friendRequest: "person.badge.plus"
         case .groupInvite, .groupJoined, .groupDeclined, .groupLeft: "person.3.fill"
+        case .groupDeleted: "person.crop.circle.badge.minus"
         case .happCreated: "sparkles"
         case .happJoined: "person.crop.circle.badge.checkmark"
         case .happLeft: "person.crop.circle.badge.xmark"
