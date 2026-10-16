@@ -24,11 +24,22 @@ struct UserProfile: Codable, Identifiable {
     var status: UserStatus
     var isVisible: Bool
     var friendIDs: [String]
+    var isOnCampus: Bool?
     @ServerTimestamp var statusUpdatedAt: Date?
     
     var id: String { documentID ?? "" }
     
-    init(id: String, displayName: String, email: String, phoneNumber: String? = nil, avatarSymbol: String? = nil, status: UserStatus = .available, isVisible: Bool = true, friendIDs: [String] = []) {
+    init(
+        id: String,
+        displayName: String,
+        email: String,
+        phoneNumber: String? = nil,
+        avatarSymbol: String? = nil,
+        status: UserStatus = .available,
+        isVisible: Bool = true,
+        friendIDs: [String] = [],
+        isOnCampus: Bool? = nil
+    ) {
         self.documentID = id
         self.displayName = displayName
         self.email = email
@@ -37,13 +48,14 @@ struct UserProfile: Codable, Identifiable {
         self.status = status
         self.isVisible = isVisible
         self.friendIDs = friendIDs
+        self.isOnCampus = isOnCampus
         self.statusUpdatedAt = nil
     }
     
     var creationData: [String: Any] {
         var data: [String: Any] = [
             "displayName": displayName, "email": email, "status": status.rawValue,
-            "isVisible": isVisible, "friendIDs": friendIDs,
+            "isVisible": isVisible, "friendIDs": friendIDs, "isOnCampus": false,
             "createdAt": FieldValue.serverTimestamp(), "statusUpdatedAt": FieldValue.serverTimestamp()
         ]
         if let phoneNumber { data["phoneNumber"] = phoneNumber }

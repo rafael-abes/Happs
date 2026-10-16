@@ -15,6 +15,10 @@ final class FriendStore: ObservableObject {
     @Published private(set) var friendLocations: [String: LiveLocation] = [:]
     @Published private(set) var incomingRequests: [FriendRequest] = []
     @Published private(set) var errorMessage: String?
+    /// Friends who are on campus right now and haven't hidden themselves.
+    var onlineFriends: [UserProfile] {
+        friends.filter { $0.isVisible && ($0.isOnCampus ?? false) }
+    }
     
     private let database: Firestore
     private let notifications: NotificationWriter
@@ -178,13 +182,13 @@ final class FriendStore: ObservableObject {
     // MARK: - Search and requests
     
     func searchUsers(matching query: String, excluding currentUserID: String) async throws -> [UserSearchEntry] {
-        let cleaned = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleaned.isEmpty else { return [] }
+        let key = UserSearchEntry.searchKey(for: query)
+        guard !key.isEmpty else { return [] }
         
         let snapshot = try await database.collection(UserSearchEntry.collectionName)
-            .order(by: "displayName")
-            .start(at: [cleaned])
-            .end(at: [cleaned + "\u{f8ff}"])
+            .order(by: "searchKey")
+            .start(at: [key])
+            .end(at: [key + "\u{f8ff}"])
             .limit(to: 20)
             .getDocuments()
         
@@ -197,12 +201,20 @@ final class FriendStore: ObservableObject {
         guard currentUserID != targetUserID else {
             throw AppError.invalidForm("You can't friend yourself.")
         }
+        guard watchedFriendIDs?.contains(targetUserID) != true else {
+            throw AppError.invalidForm("You're already friends.")
+        }
         
-        let existing = try await database.collection(FriendRequest.collectionName)
-            .whereField("fromUserID", isEqualTo: currentUserID)
-            .whereField("toUserID", isEqualTo: targetUserID)
-            .whereField("status", isEqualTo: FriendRequestStatus.pending.rawValue)
-            .getDocuments()
+        let existing: QuerySnapshot
+        do {
+            existing = try await database.collection(FriendRequest.collectionName)
+                .whereField("fromUserID", isEqualTo: currentUserID)
+                .whereField("toUserID", isEqualTo: targetUserID)
+                .whereField("status", isEqualTo: FriendRequestStatus.pending.rawValue)
+                .getDocuments()
+        } catch {
+            throw AppError.invalidForm("Couldn't check for an existing request: \(error.localizedDescription)")
+        }
         guard existing.documents.isEmpty else {
             throw AppError.invalidForm("Friend request already sent.")
         }
@@ -213,8 +225,12 @@ final class FriendStore: ObservableObject {
             toUserID: targetUserID,
             status: .pending
         )
-        let data = try Firestore.Encoder().encode(request)
-        try await database.collection(FriendRequest.collectionName).document().setData(data)
+        do {
+            let data = try Firestore.Encoder().encode(request)
+            try await database.collection(FriendRequest.collectionName).document().setData(data)
+        } catch {
+            throw AppError.invalidForm("Couldn't send the request: \(error.localizedDescription)")
+        }
         
         await notifications.send([
             NotificationDraft(
@@ -242,5 +258,24 @@ final class FriendStore: ObservableObject {
     
     func declineRequest(_ request: FriendRequest) async throws {
         try await database.collection(FriendRequest.collectionName).document(request.id).delete()
+    }
+    
+    /// Removes the friendship from both sides. The location rule reads `friendIDs`,
+    /// so the removed friend loses access to your pin the moment this commits.
+    func removeFriend(_ friendID: String, currentUserID: String) async {
+        let batch = database.batch()
+        batch.updateData(
+            ["friendIDs": FieldValue.arrayRemove([friendID])],
+            forDocument: database.collection("users").document(currentUserID)
+        )
+        batch.updateData(
+            ["friendIDs": FieldValue.arrayRemove([currentUserID])],
+            forDocument: database.collection("users").document(friendID)
+        )
+        do {
+            try await batch.commit()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }

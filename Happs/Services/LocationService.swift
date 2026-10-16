@@ -21,6 +21,7 @@ final class LocationService: NSObject, ObservableObject {
     private let database = Firestore.firestore()
     private var currentUserID: String?
     private var hasClearedOutside = false
+    private var lastPresence: Bool?
     
     static let campusBoundary: [CLLocationCoordinate2D] = [
         CLLocationCoordinate2D(latitude: -37.90670054042203, longitude: 145.14179024978608),
@@ -44,6 +45,7 @@ final class LocationService: NSObject, ObservableObject {
         currentUserID = userID
         hasClearedOutside = false
         isPublishedOnCampus = false
+        lastPresence = nil
         manager.startUpdatingLocation()
     }
     
@@ -53,10 +55,12 @@ final class LocationService: NSObject, ObservableObject {
         manager.stopUpdatingLocation()
     }
     
-    /// Call before signing out, while the user is still authenticated, so no ghost pin stays behind.
+    /// Call before signing out, while still authenticated, so no ghost pin or
+    /// "on campus" flag is left behind.
     func clearLiveLocation(for userID: String) async {
         stopSharing()
         try? await database.collection("liveLocations").document(userID).delete()
+        try? await database.collection("users").document(userID).updateData(["isOnCampus": false])
     }
     
     private func handle(_ coordinate: CLLocationCoordinate2D) {
@@ -65,10 +69,21 @@ final class LocationService: NSObject, ObservableObject {
         if inside != isInsideCampus { isInsideCampus = inside }
         
         guard let userID = currentUserID else { return }
+        updatePresence(inside, userID: userID)
         if inside {
             publishLocation(coordinate, userID: userID)
         } else {
             removeLocation(userID: userID)
+        }
+    }
+    
+    /// A coarse "on campus" flag friends can see from anywhere. It carries no coordinates.
+    private func updatePresence(_ onCampus: Bool, userID: String) {
+        guard lastPresence != onCampus else { return }
+        lastPresence = onCampus
+        database.collection("users").document(userID).updateData(["isOnCampus": onCampus]) { [weak self] error in
+            guard error != nil else { return }
+            Task { @MainActor in self?.lastPresence = nil }
         }
     }
     
@@ -97,7 +112,7 @@ final class LocationService: NSObject, ObservableObject {
         }
     }
     
-    private static func isInside(_ point: CLLocationCoordinate2D, polygon: [CLLocationCoordinate2D]) -> Bool {
+    static func isInside(_ point: CLLocationCoordinate2D, polygon: [CLLocationCoordinate2D]) -> Bool {
         var isInside = false
         var j = polygon.count - 1
         for i in 0..<polygon.count {
