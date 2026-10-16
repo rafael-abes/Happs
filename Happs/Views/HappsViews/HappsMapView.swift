@@ -29,22 +29,27 @@ struct HappsMapView: View {
     @EnvironmentObject private var locationService: LocationService
     
     @State private var mode = LayerMode.all
-    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .region(LocationService.campusRegion))
+    @State private var cameraPosition: MapCameraPosition = .region(LocationService.campusRegion)
     @State private var selection: MapSelection?
     @State private var detailHappID: String?
-    @State private var isJoining = false
+    @State private var happPendingLeave: Happ?
+    @State private var isWorking = false
+    @State private var now = Date()
     @State private var errorMessage: String?
     
-    private var access: CampusAccess { locationService.campusAccess }
     private var showsHapps: Bool { mode != .friends }
     private var showsFriends: Bool { mode != .happs }
     
-    private var mappableHapps: [Happ] {
-        happStore.happs.filter { $0.coordinate != nil }
+    private var liveHapps: [Happ] {
+        happStore.happs.filter { !$0.hasEnded(at: now) }
     }
     
-    private var unmappedCount: Int {
-        happStore.happs.count - mappableHapps.count
+    private var mappableHapps: [Happ] {
+        liveHapps.filter { $0.showsOnMap }
+    }
+    
+    private var offMapCount: Int {
+        liveHapps.count - mappableHapps.count
     }
     
     private var selectedHapp: Happ? {
@@ -68,14 +73,6 @@ struct HappsMapView: View {
     }
     
     var body: some View {
-        if access == .inside {
-            liveMap
-        } else {
-            CampusLockedView(access: access, happs: happStore.happs)
-        }
-    }
-    
-    private var liveMap: some View {
         Map(position: $cameraPosition) {
             UserAnnotation()
             
@@ -96,7 +93,24 @@ struct HappsMapView: View {
         .navigationDestination(item: $detailHappID) { id in
             HappDetailView(happID: id)
         }
+        .expiryClock($now, boundaries: happStore.happs.clockBoundaries)
+        .onAppear(perform: centerCamera)
         .onChange(of: mode) { _, _ in selection = nil }
+        .confirmationDialog(
+            "Leave this Happ?",
+            isPresented: leaveIsPresented,
+            titleVisibility: .visible,
+            presenting: happPendingLeave
+        ) { happ in
+            Button("Leave \(happ.title)", role: .destructive) {
+                if let userID = authService.user?.uid {
+                    updateParticipation(happ, isJoining: false, userID: userID)
+                }
+            }
+            Button("Stay", role: .cancel) { }
+        } message: { _ in
+            Text("You can rejoin while it's still on.")
+        }
         .alert("Couldn't Update", isPresented: errorIsPresented) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
@@ -152,7 +166,7 @@ struct HappsMapView: View {
             HappCard(
                 happ: happ,
                 currentUserID: authService.user?.uid ?? "",
-                isWorking: isJoining,
+                isWorking: isWorking,
                 onJoinToggle: { toggleJoin(happ) },
                 onOpen: { detailHappID = happ.id },
                 onClose: { selection = nil }
@@ -163,27 +177,49 @@ struct HappsMapView: View {
             FriendCard(friend: friend, onClose: { selection = nil })
                 .padding(.horizontal)
                 .padding(.bottom, 8)
-        } else if showsHapps && unmappedCount > 0 {
-            Text("\(unmappedCount) happ\(unmappedCount == 1 ? "" : "s") without a map pin. See the list.")
+        } else if showsHapps && offMapCount > 0 {
+            Text("\(offMapCount) happ\(offMapCount == 1 ? "" : "s") not on the map (off campus or no pin). See the list.")
                 .font(.caption)
+                .multilineTextAlignment(.center)
                 .padding(8)
                 .background(.regularMaterial, in: Capsule())
                 .padding(.bottom, 8)
         }
     }
     
+    private var leaveIsPresented: Binding<Bool> {
+        Binding(get: { happPendingLeave != nil }, set: { if !$0 { happPendingLeave = nil } })
+    }
+    
     private var errorIsPresented: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
     
+    private func centerCamera() {
+        if let coordinate = locationService.currentCoordinate {
+            cameraPosition = .region(
+                MKCoordinateRegion(center: coordinate, latitudinalMeters: 600, longitudinalMeters: 600)
+            )
+        } else {
+            cameraPosition = .region(LocationService.campusRegion)
+        }
+    }
+    
     private func toggleJoin(_ happ: Happ) {
         guard let userID = authService.user?.uid else { return }
-        let joining = !happ.containsParticipant(userID)
-        isJoining = true
+        if happ.containsParticipant(userID) {
+            happPendingLeave = happ
+        } else {
+            updateParticipation(happ, isJoining: true, userID: userID)
+        }
+    }
+    
+    private func updateParticipation(_ happ: Happ, isJoining: Bool, userID: String) {
+        isWorking = true
         Task {
-            defer { isJoining = false }
+            defer { isWorking = false }
             do {
-                try await happStore.toggleParticipation(happID: happ.id, userID: userID, isJoining: joining)
+                try await happStore.toggleParticipation(happID: happ.id, userID: userID, isJoining: isJoining)
             } catch {
                 errorMessage = error.localizedDescription
             }

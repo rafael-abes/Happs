@@ -8,6 +8,10 @@ import SwiftUI
 import FirebaseAuth
 
 struct HappDetailView: View {
+    private enum PendingAction {
+        case leave, cancel
+    }
+    
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
     @Environment(\.dismiss) private var dismiss
@@ -15,7 +19,7 @@ struct HappDetailView: View {
     
     @State private var isWorking = false
     @State private var isEditing = false
-    @State private var isConfirmingDelete = false
+    @State private var pendingAction: PendingAction?
     @State private var errorMessage: String?
     
     private var happ: Happ? {
@@ -48,11 +52,24 @@ struct HappDetailView: View {
                 NavigationStack { HappEditorView(happ: happ) }
             }
         }
-        .confirmationDialog("Cancel this Happ?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-            Button("Cancel Happ", role: .destructive) { deleteHapp() }
+        .confirmationDialog(
+            pendingAction == .cancel ? "Cancel this Happ?" : "Leave this Happ?",
+            isPresented: pendingIsPresented,
+            titleVisibility: .visible,
+            presenting: pendingAction
+        ) { action in
+            switch action {
+            case .cancel:
+                Button("Cancel Happ", role: .destructive) { deleteHapp() }
+            case .leave:
+                Button("Leave Happ", role: .destructive) { leaveHapp() }
+            }
             Button("Keep", role: .cancel) { }
-        } message: {
-            Text("It will be removed for everyone who joined.")
+        } message: { action in
+            switch action {
+            case .cancel: Text("It will be removed for everyone who joined.")
+            case .leave: Text("You can rejoin while it's still on.")
+            }
         }
         .alert("Something Went Wrong", isPresented: errorIsPresented) {
             Button("OK", role: .cancel) { errorMessage = nil }
@@ -70,18 +87,21 @@ struct HappDetailView: View {
             Section("Details") {
                 LabeledContent("Category", value: happ.category.rawValue)
                 LabeledContent("Location", value: happ.location)
-                LabeledContent("Starts", value: happ.startTime.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("When", value: happ.timeRangeText)
                 LabeledContent("Organiser", value: happ.creatorName)
                 LabeledContent("Going", value: "\(happ.participantIDs.count)")
             }
             
             Section {
                 if happ.creatorID == currentUserID {
-                    Button("Cancel Happ", role: .destructive) { isConfirmingDelete = true }
+                    Button("Cancel Happ", role: .destructive) { pendingAction = .cancel }
+                        .disabled(isWorking)
+                } else if happ.containsParticipant(currentUserID) {
+                    Button("Leave Happ", role: .destructive) { pendingAction = .leave }
                         .disabled(isWorking)
                 } else {
-                    Button(happ.containsParticipant(currentUserID) ? "Leave Happ" : "Join Happ") {
-                        toggleParticipation(happ: happ, userID: currentUserID)
+                    Button("Join Happ") {
+                        setParticipation(happ: happ, userID: currentUserID, isJoining: true)
                     }
                     .disabled(isWorking)
                 }
@@ -89,13 +109,21 @@ struct HappDetailView: View {
         }
     }
     
+    private var pendingIsPresented: Binding<Bool> {
+        Binding(get: { pendingAction != nil }, set: { if !$0 { pendingAction = nil } })
+    }
+    
     private var errorIsPresented: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
     
-    private func toggleParticipation(happ: Happ, userID: String) {
+    private func leaveHapp() {
+        guard let happ, let userID = authService.user?.uid else { return }
+        setParticipation(happ: happ, userID: userID, isJoining: false)
+    }
+    
+    private func setParticipation(happ: Happ, userID: String, isJoining: Bool) {
         isWorking = true
-        let isJoining = happ.containsParticipant(userID) == false
         Task {
             defer { isWorking = false }
             do {

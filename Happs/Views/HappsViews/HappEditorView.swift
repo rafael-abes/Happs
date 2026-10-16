@@ -20,8 +20,11 @@ struct HappEditorView: View {
     @State private var details: String
     @State private var location: String
     @State private var selectedCoordinate: CLLocationCoordinate2D?
+    @State private var isOffCampus: Bool
     @State private var category: HappCategory
     @State private var startTime: Date
+    @State private var hasEndTime: Bool
+    @State private var endTime: Date
     @State private var invitedGroupIDs: Set<String> = []
     @State private var isSaving = false
     @State private var isPresentingLocationPicker = false
@@ -29,12 +32,16 @@ struct HappEditorView: View {
     
     init(happ: Happ? = nil) {
         editing = happ
+        let start = happ?.startTime ?? Date()
         _title = State(initialValue: happ?.title ?? "")
         _details = State(initialValue: happ?.details ?? "")
         _location = State(initialValue: happ?.location ?? "")
         _selectedCoordinate = State(initialValue: happ?.coordinate)
+        _isOffCampus = State(initialValue: happ?.isOffCampus ?? false)
         _category = State(initialValue: happ?.category ?? .happs)
-        _startTime = State(initialValue: happ?.startTime ?? Date())
+        _startTime = State(initialValue: start)
+        _hasEndTime = State(initialValue: happ?.hasEndTime ?? true)
+        _endTime = State(initialValue: happ?.endTime ?? start.addingTimeInterval(60 * 60))
     }
     
     var body: some View {
@@ -51,15 +58,13 @@ struct HappEditorView: View {
                         Text(location.isEmpty ? "Add Location" : location)
                             .foregroundStyle(location.isEmpty ? .secondary : .primary)
                         Spacer()
-                        Image(systemName: "mappin.and.ellipse")
+                        Image(systemName: isOffCampus ? "location.slash" : "mappin.and.ellipse")
                     }
                 }
                 .buttonStyle(.plain)
             }
             
-            Section("When") {
-                DatePicker("Time", selection: $startTime)
-            }
+            whenSection
             
             Section("Category") {
                 Picker("Category", selection: $category) {
@@ -89,14 +94,40 @@ struct HappEditorView: View {
                 Button(editing == nil ? "Add Happ" : "Save") { save() }.disabled(isSaving)
             }
         }
+        .onChange(of: startTime) { _, newStart in
+            if endTime <= newStart {
+                endTime = newStart.addingTimeInterval(60 * 60)
+            }
+        }
         .interactiveDismissDisabled(isSaving)
         .sheet(isPresented: $isPresentingLocationPicker) {
-            LocationPickerView(category: category, selectedName: $location, selectedCoordinate: $selectedCoordinate)
+            LocationPickerView(
+                category: category,
+                selectedName: $location,
+                selectedCoordinate: $selectedCoordinate,
+                isOffCampus: $isOffCampus
+            )
         }
         .alert("Couldn't Save Happ", isPresented: errorIsPresented) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "Please try again.")
+        }
+    }
+    
+    private var whenSection: some View {
+        Section {
+            DatePicker("Starts", selection: $startTime)
+            Toggle("Set an end time", isOn: $hasEndTime)
+            if hasEndTime {
+                DatePicker("Ends", selection: $endTime, in: startTime...)
+            }
+        } header: {
+            Text("When")
+        } footer: {
+            if !hasEndTime {
+                Text("With no end time, a Happ stays up for 3 hours after it starts.")
+            }
         }
     }
     
@@ -153,6 +184,8 @@ struct HappEditorView: View {
             return
         }
         
+        let finalEnd: Date? = hasEndTime ? endTime : nil
+        
         isSaving = true
         Task {
             defer { isSaving = false }
@@ -165,8 +198,10 @@ struct HappEditorView: View {
                         location: location,
                         category: category,
                         startTime: startTime,
+                        endTime: finalEnd,
                         latitude: selectedCoordinate?.latitude,
-                        longitude: selectedCoordinate?.longitude
+                        longitude: selectedCoordinate?.longitude,
+                        isOffCampus: isOffCampus
                     )
                 } else {
                     try await happStore.createHapp(
@@ -175,10 +210,12 @@ struct HappEditorView: View {
                         location: location,
                         category: category,
                         startTime: startTime,
+                        endTime: finalEnd,
                         creatorID: user.uid,
                         creatorName: user.displayName ?? user.email ?? "Someone",
                         latitude: selectedCoordinate?.latitude,
                         longitude: selectedCoordinate?.longitude,
+                        isOffCampus: isOffCampus,
                         invitedIDs: invitedFriendIDs
                     )
                 }
