@@ -14,6 +14,11 @@ enum FriendRequestStatus: String, Codable {
 struct FriendRequest: Codable, Identifiable {
     static let collectionName = "friendRequests"
     
+    /// Requests live at a predictable ID so security rules can prove one exists.
+    static func documentID(from senderID: String, to recipientID: String) -> String {
+        "\(senderID)_\(recipientID)"
+    }
+    
     @DocumentID private var documentID: String?
     let fromUserID: String
     let fromDisplayName: String

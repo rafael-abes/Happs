@@ -25,6 +25,7 @@ struct UserProfile: Codable, Identifiable {
     var isVisible: Bool
     var friendIDs: [String]
     var isOnCampus: Bool?
+    var lastSeenAt: Date?
     @ServerTimestamp var statusUpdatedAt: Date?
     
     var id: String { documentID ?? "" }
@@ -38,7 +39,8 @@ struct UserProfile: Codable, Identifiable {
         status: UserStatus = .available,
         isVisible: Bool = true,
         friendIDs: [String] = [],
-        isOnCampus: Bool? = nil
+        isOnCampus: Bool? = nil,
+        lastSeenAt: Date? = nil
     ) {
         self.documentID = id
         self.displayName = displayName
@@ -49,7 +51,27 @@ struct UserProfile: Codable, Identifiable {
         self.isVisible = isVisible
         self.friendIDs = friendIDs
         self.isOnCampus = isOnCampus
+        self.lastSeenAt = lastSeenAt
         self.statusUpdatedAt = nil
+    }
+    
+    /// Decodes strictly first, then falls back to defaults for any missing field, so an
+    /// older or partly written profile never makes a friend vanish.
+    static func tolerant(from snapshot: DocumentSnapshot) -> UserProfile? {
+        guard snapshot.exists, let data = snapshot.data() else { return nil }
+        if let decoded = try? snapshot.data(as: UserProfile.self) { return decoded }
+        return UserProfile(
+            id: snapshot.documentID,
+            displayName: (data["displayName"] as? String) ?? "Happs User",
+            email: (data["email"] as? String) ?? "",
+            phoneNumber: data["phoneNumber"] as? String,
+            avatarSymbol: data["avatarSymbol"] as? String,
+            status: (data["status"] as? String).flatMap(UserStatus.init(rawValue:)) ?? .available,
+            isVisible: (data["isVisible"] as? Bool) ?? true,
+            friendIDs: (data["friendIDs"] as? [String]) ?? [],
+            isOnCampus: data["isOnCampus"] as? Bool,
+            lastSeenAt: (data["lastSeenAt"] as? Timestamp)?.dateValue()
+        )
     }
     
     var creationData: [String: Any] {
@@ -61,5 +83,15 @@ struct UserProfile: Codable, Identifiable {
         if let phoneNumber { data["phoneNumber"] = phoneNumber }
         if let avatarSymbol { data["avatarSymbol"] = avatarSymbol }
         return data
+    }
+}
+
+enum Freshness {
+    /// Heartbeats arrive every 60 seconds, so three minutes means something went quiet.
+    static let staleAfter: TimeInterval = 180
+    
+    static func isFresh(_ date: Date?, now: Date, missingIsFresh: Bool) -> Bool {
+        guard let date else { return missingIsFresh }
+        return now.timeIntervalSince(date) < staleAfter
     }
 }
