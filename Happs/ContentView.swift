@@ -25,6 +25,8 @@ struct ContentView: View {
 }
 
 private struct AuthenticatedRootView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    
     @StateObject private var authService = AuthService()
     @StateObject private var happStore = HappStore()
     @StateObject private var friendStore = FriendStore()
@@ -71,6 +73,11 @@ private struct AuthenticatedRootView: View {
         }
         .onChange(of: locationService.isPublishedOnCampus) { _, allowed in
             friendStore.setLocationAccess(allowed)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            locationService.refreshNow()
+            friendStore.refreshClock()
         }
     }
 }

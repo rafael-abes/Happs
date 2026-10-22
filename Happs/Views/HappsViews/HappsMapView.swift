@@ -59,7 +59,7 @@ struct HappsMapView: View {
     
     private var selectedFriend: UserProfile? {
         guard showsFriends, case .friend(let id)? = selection,
-              friendStore.friendLocations[id] != nil else { return nil }
+              friendStore.location(for: id) != nil else { return nil }
         return friendStore.friends.first { $0.id == id }
     }
     
@@ -134,7 +134,7 @@ struct HappsMapView: View {
     @MapContentBuilder
     private var friendAnnotations: some MapContent {
         ForEach(friendStore.friends) { friend in
-            if let location = friendStore.friendLocations[friend.id] {
+            if let location = friendStore.location(for: friend.id) {
                 Annotation(
                     friend.displayName,
                     coordinate: CLLocationCoordinate2D(latitude: location.latitude, longitude: location.longitude)

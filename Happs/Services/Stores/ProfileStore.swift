@@ -21,6 +21,7 @@ final class ProfileStore: ObservableObject {
     }
     
     func startListening(userID: String) {
+        listener?.remove()
         listener = database.collection("users").document(userID)
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
@@ -31,18 +32,9 @@ final class ProfileStore: ObservableObject {
                         #endif
                         return
                     }
-                    do {
-                        let newProfile = try snapshot?.data(as: UserProfile.self)
-                        guard newProfile?.status != self.profile?.status
-                            || newProfile?.isVisible != self.profile?.isVisible
-                            || newProfile?.avatarSymbol != self.profile?.avatarSymbol
-                            || self.profile == nil else { return }
-                        self.profile = newProfile
-                    } catch {
-                        #if DEBUG
-                        print("Failed to decode profile: \(error)")
-                        #endif
-                    }
+                    guard let snapshot, let latest = UserProfile.tolerant(from: snapshot) else { return }
+                    // Only publish what the UI shows, so heartbeat writes don't redraw the profile.
+                    if self.differs(latest) { self.profile = latest }
                 }
             }
     }
@@ -66,5 +58,12 @@ final class ProfileStore: ObservableObject {
     
     func updateAvatar(_ symbol: String, for userID: String) async throws {
         try await database.collection("users").document(userID).updateData(["avatarSymbol": symbol])
+    }
+    
+    private func differs(_ latest: UserProfile) -> Bool {
+        guard let current = profile else { return true }
+        return latest.status != current.status
+            || latest.isVisible != current.isVisible
+            || latest.avatarSymbol != current.avatarSymbol
     }
 }

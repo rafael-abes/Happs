@@ -11,6 +11,9 @@ import Combine
 
 @MainActor
 final class LocationService: NSObject, ObservableObject {
+    /// How often an on-campus user re-announces themselves, even when standing still.
+    static let heartbeatInterval: TimeInterval = 60
+    
     @Published private(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published private(set) var isInsideCampus = false
     /// True only once the server has acknowledged this user's on-campus location document.
@@ -20,8 +23,8 @@ final class LocationService: NSObject, ObservableObject {
     private let manager = CLLocationManager()
     private let database = Firestore.firestore()
     private var currentUserID: String?
-    private var hasClearedOutside = false
-    private var lastPresence: Bool?
+    private var hasLeftCampus = false
+    private var heartbeatTask: Task<Void, Never>?
     
     static let campusBoundary: [CLLocationCoordinate2D] = [
         CLLocationCoordinate2D(latitude: -37.90670054042203, longitude: 145.14179024978608),
@@ -43,24 +46,45 @@ final class LocationService: NSObject, ObservableObject {
     
     func startSharing(userID: String) {
         currentUserID = userID
-        hasClearedOutside = false
+        hasLeftCampus = false
         isPublishedOnCampus = false
-        lastPresence = nil
         manager.startUpdatingLocation()
+        startHeartbeat()
     }
     
     func stopSharing() {
         currentUserID = nil
         isPublishedOnCampus = false
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
         manager.stopUpdatingLocation()
+    }
+    
+    /// Re-announces the user now. Called by the heartbeat and when the app returns to the foreground.
+    func refreshNow() {
+        guard let userID = currentUserID, isInsideCampus, let coordinate = currentCoordinate else { return }
+        publish(coordinate, userID: userID)
     }
     
     /// Call before signing out, while still authenticated, so no ghost pin or
     /// "on campus" flag is left behind.
     func clearLiveLocation(for userID: String) async {
         stopSharing()
-        try? await database.collection("liveLocations").document(userID).delete()
-        try? await database.collection("users").document(userID).updateData(["isOnCampus": false])
+        let batch = database.batch()
+        batch.deleteDocument(database.collection("liveLocations").document(userID))
+        batch.setData(["isOnCampus": false], forDocument: database.collection("users").document(userID), merge: true)
+        try? await batch.commit()
+    }
+    
+    private func startHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Self.heartbeatInterval))
+                guard !Task.isCancelled, let self else { return }
+                self.refreshNow()
+            }
+        }
     }
     
     private func handle(_ coordinate: CLLocationCoordinate2D) {
@@ -69,46 +93,54 @@ final class LocationService: NSObject, ObservableObject {
         if inside != isInsideCampus { isInsideCampus = inside }
         
         guard let userID = currentUserID else { return }
-        updatePresence(inside, userID: userID)
         if inside {
-            publishLocation(coordinate, userID: userID)
+            publish(coordinate, userID: userID)
         } else {
-            removeLocation(userID: userID)
+            leaveCampus(userID: userID)
         }
     }
     
-    /// A coarse "on campus" flag friends can see from anywhere. It carries no coordinates.
-    private func updatePresence(_ onCampus: Bool, userID: String) {
-        guard lastPresence != onCampus else { return }
-        lastPresence = onCampus
-        database.collection("users").document(userID).updateData(["isOnCampus": onCampus]) { [weak self] error in
-            guard error != nil else { return }
-            Task { @MainActor in self?.lastPresence = nil }
-        }
-    }
-    
-    private func publishLocation(_ coordinate: CLLocationCoordinate2D, userID: String) {
-        hasClearedOutside = false
-        database.collection("liveLocations").document(userID).setData([
+    /// One batch updates the pin and the coarse "on campus" flag friends can see from anywhere.
+    private func publish(_ coordinate: CLLocationCoordinate2D, userID: String) {
+        hasLeftCampus = false
+        let batch = database.batch()
+        batch.setData([
             "latitude": coordinate.latitude,
             "longitude": coordinate.longitude,
             "updatedAt": FieldValue.serverTimestamp()
-        ]) { [weak self] error in
-            guard error == nil else { return }
+        ], forDocument: database.collection("liveLocations").document(userID))
+        batch.setData([
+            "isOnCampus": true,
+            "lastSeenAt": FieldValue.serverTimestamp()
+        ], forDocument: database.collection("users").document(userID), merge: true)
+        
+        batch.commit { [weak self] error in
             Task { @MainActor in
-                guard let self, self.isInsideCampus, !self.isPublishedOnCampus else { return }
-                self.isPublishedOnCampus = true
+                guard let self else { return }
+                if let error {
+                    #if DEBUG
+                    print("Couldn't publish location: \(error.localizedDescription)")
+                    #endif
+                    return
+                }
+                if self.isInsideCampus && !self.isPublishedOnCampus {
+                    self.isPublishedOnCampus = true
+                }
             }
         }
     }
     
-    private func removeLocation(userID: String) {
+    private func leaveCampus(userID: String) {
         isPublishedOnCampus = false
-        guard !hasClearedOutside else { return }
-        hasClearedOutside = true
-        database.collection("liveLocations").document(userID).delete { [weak self] error in
+        guard !hasLeftCampus else { return }
+        hasLeftCampus = true
+        
+        let batch = database.batch()
+        batch.deleteDocument(database.collection("liveLocations").document(userID))
+        batch.setData(["isOnCampus": false], forDocument: database.collection("users").document(userID), merge: true)
+        batch.commit { [weak self] error in
             guard error != nil else { return }
-            Task { @MainActor in self?.hasClearedOutside = false }
+            Task { @MainActor in self?.hasLeftCampus = false }
         }
     }
     

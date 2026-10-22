@@ -110,7 +110,7 @@ struct FriendsListView: View {
             AvatarView(symbol: friend.avatarSymbol, size: 36, ringColor: friend.isVisible ? friend.status.color : nil)
             VStack(alignment: .leading, spacing: 2) {
                 Text(friend.displayName)
-                if friend.isVisible && (friend.isOnCampus ?? false) {
+                if friendStore.isOnlineOnCampus(friend) {
                     Label("On campus", systemImage: "location.fill")
                         .font(.caption2)
                         .foregroundStyle(.green)

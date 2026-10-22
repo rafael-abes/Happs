@@ -59,6 +59,8 @@ final class HappStore: ObservableObject {
     
     // MARK: - Create, update, delete
     
+    /// `invitedIDs` get a personal invitation wherever they are. `audienceIDs` (friends on
+    /// campus right now) get the broadcast "New Happ" notification.
     func createHapp(
         title: String,
         details: String,
@@ -71,7 +73,8 @@ final class HappStore: ObservableObject {
         latitude: Double? = nil,
         longitude: Double? = nil,
         isOffCampus: Bool = false,
-        invitedIDs: [String] = []
+        invitedIDs: [String] = [],
+        audienceIDs: [String] = []
     ) async throws {
         let checked = try validated(title: title, location: location, startTime: startTime, endTime: endTime)
         
@@ -99,11 +102,12 @@ final class HappStore: ObservableObject {
         let data = try Firestore.Encoder().encode(happ)
         try await database.collection(Happ.collectionName).document().setData(data)
         
-        await notifyFriendsOfNewHapp(
+        await notifyAboutNewHapp(
             title: checked.title,
             creatorID: creatorID,
             creatorName: creatorName,
-            invitedIDs: invitedIDs
+            invitedIDs: invitedIDs,
+            audienceIDs: audienceIDs
         )
     }
     
@@ -225,48 +229,31 @@ final class HappStore: ObservableObject {
         return (cleanedTitle, cleanedLocation)
     }
     
-    /// Friends on campus get the broadcast. Direct group invitations always go out,
-    /// because they are personal and the invitee may be heading in.
-    private func notifyFriendsOfNewHapp(title: String, creatorID: String, creatorName: String, invitedIDs: [String]) async {
-        let snapshot = try? await database.collection("users").document(creatorID).getDocument()
-        let friendIDs = snapshot?.get("friendIDs") as? [String] ?? []
-        guard !friendIDs.isEmpty else { return }
-        
-        let onCampusIDs = await friendsOnCampus(among: friendIDs)
-        
-        var drafts: [NotificationDraft] = []
-        for friendID in friendIDs {
-            if invitedIDs.contains(friendID) {
-                drafts.append(NotificationDraft(
-                    recipientID: friendID,
-                    kind: .happCreated,
-                    title: "You're invited",
-                    body: "\(creatorName) invited you to \(title)"
-                ))
-            } else if onCampusIDs.contains(friendID) {
-                drafts.append(NotificationDraft(
-                    recipientID: friendID,
+    private func notifyAboutNewHapp(
+        title: String,
+        creatorID: String,
+        creatorName: String,
+        invitedIDs: [String],
+        audienceIDs: [String]
+    ) async {
+        let invitations = invitedIDs.map {
+            NotificationDraft(
+                recipientID: $0,
+                kind: .happCreated,
+                title: "You're invited",
+                body: "\(creatorName) invited you to \(title)"
+            )
+        }
+        let broadcasts = audienceIDs
+            .filter { !invitedIDs.contains($0) }
+            .map {
+                NotificationDraft(
+                    recipientID: $0,
                     kind: .happCreated,
                     title: "New Happ",
                     body: "\(creatorName) created \(title)"
-                ))
+                )
             }
-        }
-        await notifications.send(drafts, from: creatorID)
-    }
-    
-    /// Invisible Mode doesn't matter here: it hides you from others, not others from you.
-    private func friendsOnCampus(among ids: [String]) async -> Set<String> {
-        var found = Set<String>()
-        for start in stride(from: 0, to: ids.count, by: 10) {
-            let chunk = Array(ids[start..<min(start + 10, ids.count)])
-            guard let snapshot = try? await database.collection("users")
-                .whereField(FieldPath.documentID(), in: chunk)
-                .getDocuments() else { continue }
-            for document in snapshot.documents where (document.get("isOnCampus") as? Bool) == true {
-                found.insert(document.documentID)
-            }
-        }
-        return found
+        await notifications.send(invitations + broadcasts, from: creatorID)
     }
 }
