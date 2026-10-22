@@ -8,6 +8,15 @@
 import MapKit
 
 extension LocationService {
+    static var campusCenter: CLLocationCoordinate2D {
+        let points = campusBoundary
+        let count = Double(points.count)
+        return CLLocationCoordinate2D(
+            latitude: points.map(\.latitude).reduce(0, +) / count,
+            longitude: points.map(\.longitude).reduce(0, +) / count
+        )
+    }
+    
     static var campusRegion: MKCoordinateRegion {
         let lats = campusBoundary.map(\.latitude)
         let lons = campusBoundary.map(\.longitude)

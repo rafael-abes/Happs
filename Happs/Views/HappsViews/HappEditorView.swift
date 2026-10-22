@@ -14,6 +14,7 @@ struct HappEditorView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
     @EnvironmentObject private var groupStore: GroupStore
+    @EnvironmentObject private var friendStore: FriendStore
     @Environment(\.dismiss) private var dismiss
     
     @State private var title: String
@@ -32,20 +33,24 @@ struct HappEditorView: View {
     
     init(happ: Happ? = nil) {
         editing = happ
-        let start = happ?.startTime ?? Date()
-        _title = State(initialValue: happ?.title ?? "")
-        _details = State(initialValue: happ?.details ?? "")
-        _location = State(initialValue: happ?.location ?? "")
-        _selectedCoordinate = State(initialValue: happ?.coordinate)
-        _isOffCampus = State(initialValue: happ?.isOffCampus ?? false)
-        _category = State(initialValue: happ?.category ?? .happs)
-        _startTime = State(initialValue: start)
-        _hasEndTime = State(initialValue: happ?.hasEndTime ?? true)
-        _endTime = State(initialValue: happ?.endTime ?? start.addingTimeInterval(60 * 60))
+        let seed = happ.map { HappDraft(happ: $0) } ?? HappDraft.blank
+        _title = State(initialValue: seed.title)
+        _details = State(initialValue: seed.details)
+        _location = State(initialValue: seed.location)
+        _selectedCoordinate = State(initialValue: seed.coordinate)
+        _isOffCampus = State(initialValue: seed.isOffCampus)
+        _category = State(initialValue: seed.category)
+        _startTime = State(initialValue: seed.startTime)
+        _hasEndTime = State(initialValue: seed.endTime != nil)
+        _endTime = State(initialValue: seed.endTime ?? seed.startTime.addingTimeInterval(60 * 60))
     }
     
     var body: some View {
         Form {
+            if editing == nil {
+                eventSection
+            }
+            
             Section("Happ Title") {
                 TextField("What's happening?", text: $title)
             }
@@ -115,6 +120,18 @@ struct HappEditorView: View {
         }
     }
     
+    private var eventSection: some View {
+        Section {
+            NavigationLink {
+                EventSuggestionsView(onSelect: apply)
+            } label: {
+                Label("Start from a Ticketmaster event", systemImage: "ticket.fill")
+            }
+        } footer: {
+            Text("Browse upcoming events near campus and turn one into a Happ.")
+        }
+    }
+    
     private var whenSection: some View {
         Section {
             DatePicker("Starts", selection: $startTime)
@@ -178,6 +195,18 @@ struct HappEditorView: View {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
     
+    private func apply(_ seed: HappDraft) {
+        title = seed.title
+        details = seed.details
+        location = seed.location
+        selectedCoordinate = seed.coordinate
+        isOffCampus = seed.isOffCampus
+        category = seed.category
+        startTime = seed.startTime
+        hasEndTime = seed.endTime != nil
+        endTime = seed.endTime ?? seed.startTime.addingTimeInterval(60 * 60)
+    }
+    
     private func save() {
         guard let user = authService.user else {
             errorMessage = "Sign in again before saving."
@@ -216,7 +245,8 @@ struct HappEditorView: View {
                         latitude: selectedCoordinate?.latitude,
                         longitude: selectedCoordinate?.longitude,
                         isOffCampus: isOffCampus,
-                        invitedIDs: invitedFriendIDs
+                        invitedIDs: invitedFriendIDs,
+                        audienceIDs: friendStore.onCampusFriendIDs
                     )
                 }
                 dismiss()
