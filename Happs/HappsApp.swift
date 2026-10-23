@@ -58,10 +58,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 @main
 struct HappsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @StateObject private var networkMonitor = NetworkMonitor()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .offlineOverlay(networkMonitor)
         }
     }
 }

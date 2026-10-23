@@ -45,7 +45,9 @@ private struct AuthenticatedRootView: View {
             } else {
                 MainTabView()
             }
+            
         }
+        .onboarding(for: authService.user?.uid)
         .environmentObject(authService)
         .environmentObject(happStore)
         .environmentObject(friendStore)
