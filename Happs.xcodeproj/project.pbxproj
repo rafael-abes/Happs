@@ -110,6 +110,13 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		9692A7123089901100E10173 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		96BC73093052DA04003B7FD1 = {
 			isa = PBXGroup;
 			children = (
@@ -117,6 +124,7 @@
 				96BC73143052DA04003B7FD1 /* Happs */,
 				96BC73223052DA06003B7FD1 /* HappsTests */,
 				96BC732C3052DA06003B7FD1 /* HappsUITests */,
+				9692A7123089901100E10173 /* Frameworks */,
 				96BC73133052DA04003B7FD1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -455,6 +463,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Happs/Info.plist;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Happs uses your location to show you on the campus map and let friends see when you're nearby.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Happs uses the microphone so you can dictate a Happ";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Happs uses the microphone so you can dictate a Happ";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -490,6 +500,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Happs/Info.plist;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Happs uses your location to show you on the campus map and let friends see when you're nearby.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Happs uses the microphone so you can dictate a Happ";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Happs uses the microphone so you can dictate a Happ";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

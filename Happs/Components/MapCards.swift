@@ -5,11 +5,12 @@
 //  Created by Rafa Abes on 10/10/26.
 //
 
-import SwiftUI
 
+import SwiftUI
+ 
 private struct CardCloseButton: View {
     let action: () -> Void
-    
+ 
     var body: some View {
         Button(action: action) {
             Image(systemName: "xmark.circle.fill")
@@ -21,7 +22,7 @@ private struct CardCloseButton: View {
         .offset(x: 8, y: -8)
     }
 }
-
+ 
 struct HappCard: View {
     let happ: Happ
     let currentUserID: String
@@ -29,32 +30,32 @@ struct HappCard: View {
     let onJoinToggle: () -> Void
     let onOpen: () -> Void
     let onClose: () -> Void
-    
+ 
     private var isHost: Bool {
         happ.creatorID == currentUserID
     }
-    
+ 
     private var isJoined: Bool {
         happ.containsParticipant(currentUserID)
     }
-    
+ 
     private var timeText: String {
         if Calendar.current.isDateInToday(happ.startTime) {
             return happ.startTime.formatted(date: .omitted, time: .shortened)
         }
         return happ.startTime.formatted(date: .abbreviated, time: .shortened)
     }
-    
+ 
     private var buttonTitle: String {
         if isHost { return "Hosting" }
         return isJoined ? "Joined" : "Join"
     }
-    
+ 
     private var buttonSymbol: String {
         if isHost { return "star.fill" }
         return isJoined ? "checkmark.circle.fill" : "plus.circle"
     }
-    
+ 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             categoryBadge
@@ -69,7 +70,7 @@ struct HappCard: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
     }
-    
+ 
     private var categoryBadge: some View {
         Image(systemName: happ.category.symbolName)
             .font(.title3)
@@ -77,7 +78,7 @@ struct HappCard: View {
             .frame(width: 48, height: 48)
             .background(happ.category.tint.opacity(0.2), in: Circle())
     }
-    
+ 
     private var header: some View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
@@ -87,10 +88,11 @@ struct HappCard: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
+            SpeakButton(id: happ.id, text: happ.spokenSummary)
             actionButton
         }
     }
-    
+ 
     private var chips: some View {
         HStack(spacing: 6) {
             chip(timeText)
@@ -98,7 +100,7 @@ struct HappCard: View {
             chip(happ.location)
         }
     }
-    
+ 
     private func chip(_ text: String) -> some View {
         Text(text)
             .font(.caption)
@@ -107,7 +109,7 @@ struct HappCard: View {
             .padding(.vertical, 4)
             .background(Color(.tertiarySystemFill), in: Capsule())
     }
-    
+ 
     /// Hosts open the detail screen instead, so a stray tap can't delete their Happ.
     private var actionButton: some View {
         Button(action: isHost ? onOpen : onJoinToggle) {
@@ -122,11 +124,11 @@ struct HappCard: View {
         .disabled(isWorking)
     }
 }
-
+ 
 struct FriendCard: View {
     let friend: UserProfile
     let onClose: () -> Void
-    
+ 
     var body: some View {
         HStack(spacing: 12) {
             AvatarView(symbol: friend.avatarSymbol, size: 52, ringColor: friend.status.color)
@@ -137,6 +139,7 @@ struct FriendCard: View {
                     .foregroundStyle(friend.status.color)
             }
             Spacer()
+            SpeakButton(id: friend.id ?? friend.displayName, text: friend.spokenSummary)
         }
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))

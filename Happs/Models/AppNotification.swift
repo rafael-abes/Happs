@@ -33,6 +33,21 @@ enum NotificationKind: String, Codable {
         case .happCancelled: "xmark.circle.fill"
         }
     }
+    
+    var isNegative: Bool {
+        switch self {
+        case .groupDeclined,
+             .groupLeft,
+             .groupDeleted,
+             .happLeft,
+             .happCancelled:
+            true
+
+        default:
+            false
+        }
+    }
+
 }
 
 struct AppNotification: Codable, Identifiable {

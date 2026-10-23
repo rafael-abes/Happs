@@ -7,16 +7,17 @@
 import SwiftUI
 import CoreLocation
 import FirebaseAuth
-
+ 
 struct HappEditorView: View {
     private let editing: Happ?
-    
+ 
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
     @EnvironmentObject private var groupStore: GroupStore
     @EnvironmentObject private var friendStore: FriendStore
+    @EnvironmentObject private var aiService: AIService
     @Environment(\.dismiss) private var dismiss
-    
+ 
     @State private var title: String
     @State private var details: String
     @State private var location: String
@@ -30,7 +31,8 @@ struct HappEditorView: View {
     @State private var isSaving = false
     @State private var isPresentingLocationPicker = false
     @State private var errorMessage: String?
-    
+    @State private var showAssistant = false
+ 
     init(happ: Happ? = nil) {
         editing = happ
         let seed = happ.map { HappDraft(happ: $0) } ?? HappDraft.blank
@@ -44,17 +46,27 @@ struct HappEditorView: View {
         _hasEndTime = State(initialValue: seed.endTime != nil)
         _endTime = State(initialValue: seed.endTime ?? seed.startTime.addingTimeInterval(60 * 60))
     }
-    
+ 
     var body: some View {
         Form {
+            if aiService.isEnabled {
+                Section {
+                    Button { showAssistant = true } label: {
+                        Label("Describe it", systemImage: "sparkles")
+                    }
+                }
+            }
             if editing == nil {
                 eventSection
             }
-            
+ 
             Section("Happ Title") {
-                TextField("What's happening?", text: $title)
+                HStack {
+                    TextField("What's happening?", text: $title)
+                    MicButton(text: $title, id: "editor-title")
+                }
             }
-            
+ 
             Section("Location") {
                 Button {
                     isPresentingLocationPicker = true
@@ -68,9 +80,9 @@ struct HappEditorView: View {
                 }
                 .buttonStyle(.plain)
             }
-            
+ 
             whenSection
-            
+ 
             Section("Category") {
                 Picker("Category", selection: $category) {
                     ForEach(HappCategory.allCases) { category in
@@ -79,14 +91,17 @@ struct HappEditorView: View {
                 }
                 .pickerStyle(.segmented)
             }
-            
+ 
             if editing == nil {
                 inviteSection
             }
-            
+ 
             Section("Details") {
-                TextField("Add notes or anything else", text: $details, axis: .vertical)
-                    .lineLimit(3...6)
+                HStack(alignment: .top) {
+                    TextField("Add notes or anything else", text: $details, axis: .vertical)
+                        .lineLimit(3...6)
+                    MicButton(text: $details, id: "editor-details")
+                }
             }
         }
         .navigationTitle(editing == nil ? "New Happ" : "Edit Happ")
@@ -113,13 +128,21 @@ struct HappEditorView: View {
                 isOffCampus: $isOffCampus
             )
         }
+        .sheet(isPresented: $showAssistant) {
+            AssistantSheet { draft, groupID in
+                apply(draft)
+                if let groupID, editing == nil {
+                    invitedGroupIDs.insert(groupID)
+                }
+            }
+        }
         .alert("Couldn't Save Happ", isPresented: errorIsPresented) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "Please try again.")
         }
     }
-    
+ 
     private var eventSection: some View {
         Section {
             NavigationLink {
@@ -131,7 +154,7 @@ struct HappEditorView: View {
             Text("Browse upcoming events near campus and turn one into a Happ.")
         }
     }
-    
+ 
     private var whenSection: some View {
         Section {
             DatePicker("Starts", selection: $startTime)
@@ -147,7 +170,7 @@ struct HappEditorView: View {
             }
         }
     }
-    
+ 
     private var inviteSection: some View {
         Section {
             if groupStore.groups.isEmpty {
@@ -169,7 +192,7 @@ struct HappEditorView: View {
             Text("Invite a group")
         }
     }
-    
+ 
     private func inviteBinding(for group: FriendGroup) -> Binding<Bool> {
         Binding(
             get: { invitedGroupIDs.contains(group.id) },
@@ -182,7 +205,7 @@ struct HappEditorView: View {
             }
         )
     }
-    
+ 
     private var invitedFriendIDs: [String] {
         let members = groupStore.groups
             .filter { invitedGroupIDs.contains($0.id) }
@@ -190,11 +213,11 @@ struct HappEditorView: View {
             .filter { $0 != authService.user?.uid }
         return Array(Set(members))
     }
-    
+ 
     private var errorIsPresented: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
-    
+ 
     private func apply(_ seed: HappDraft) {
         title = seed.title
         details = seed.details
@@ -206,15 +229,15 @@ struct HappEditorView: View {
         hasEndTime = seed.endTime != nil
         endTime = seed.endTime ?? seed.startTime.addingTimeInterval(60 * 60)
     }
-    
+ 
     private func save() {
         guard let user = authService.user else {
             errorMessage = "Sign in again before saving."
             return
         }
-        
+ 
         let finalEnd: Date? = hasEndTime ? endTime : nil
-        
+ 
         isSaving = true
         Task {
             defer { isSaving = false }

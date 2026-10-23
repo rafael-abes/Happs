@@ -41,6 +41,12 @@ struct HappDetailView: View {
         .navigationTitle(happ?.title ?? "Happ")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if let happ {
+                    ToolbarItem(placement: .primaryAction) {
+                        SpeakButton(id: happ.id, text: happ.spokenSummary)
+                    }
+            }
+            
             if let happ, happ.creatorID == authService.user?.uid {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Edit") { isEditing = true }

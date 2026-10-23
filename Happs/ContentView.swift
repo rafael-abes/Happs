@@ -34,6 +34,7 @@ private struct AuthenticatedRootView: View {
     @StateObject private var locationService = LocationService()
     @StateObject private var groupStore = GroupStore()
     @StateObject private var notificationStore = NotificationStore()
+    @StateObject private var aiService = AIService()
     
     var body: some View {
         Group {
@@ -52,6 +53,8 @@ private struct AuthenticatedRootView: View {
         .environmentObject(locationService)
         .environmentObject(groupStore)
         .environmentObject(notificationStore)
+        .environmentObject(aiService)
+        .task { await aiService.refreshConfig() }
         .onChange(of: authService.user?.uid, initial: true) { _, userID in
             if let userID {
                 happStore.startListening()
