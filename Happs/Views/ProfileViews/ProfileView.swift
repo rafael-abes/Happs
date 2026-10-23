@@ -6,7 +6,7 @@
 //
 import SwiftUI
 import FirebaseAuth
-
+ 
 struct ProfileView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var profileStore: ProfileStore
@@ -17,13 +17,14 @@ struct ProfileView: View {
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 28
     @State private var isPresentingEditor = false
     @State private var isPresentingNotifications = false
+    @State private var isShowingAbout = false
     @State private var errorMessage: String?
-    
+ 
     private var notificationsTitle: String {
         let unread = notificationStore.unreadCount
         return unread > 0 ? "Notifications (\(unread))" : "Notifications"
     }
-    
+ 
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -37,6 +38,7 @@ struct ProfileView: View {
                 .padding(20)
             }
             .navigationTitle("Me")
+            .navigationDestination(isPresented: $isShowingAbout) { AboutView() }
             .sheet(isPresented: $isPresentingEditor) { ProfileEditorView() }
             .sheet(isPresented: $isPresentingNotifications) { NotificationsView() }
             .alert("Something Went Wrong", isPresented: errorIsPresented) {
@@ -46,13 +48,13 @@ struct ProfileView: View {
             }
         }
     }
-    
+ 
     private var header: some View {
         VStack(spacing: 6) {
             AvatarView(symbol: profileStore.profile?.avatarSymbol, size: avatarSize)
             Text(authService.user?.displayName ?? "Happs User")
                 .font(.title2.bold())
-            
+ 
             Menu {
                 ForEach(UserStatus.allCases) { status in
                     Button(status.rawValue) { updateStatus(status) }
@@ -69,7 +71,7 @@ struct ProfileView: View {
             }
         }
     }
-    
+ 
     private var invisibleModeCard: some View {
         HStack {
             Toggle("", isOn: Binding(
@@ -83,7 +85,7 @@ struct ProfileView: View {
         .padding(14)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
     }
-    
+ 
     private var appearanceCard: some View {
         HStack(spacing: 14) {
             Image(systemName: prefersDarkMode ? "moon.fill" : "sun.max.fill")
@@ -97,7 +99,7 @@ struct ProfileView: View {
         .padding(14)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
     }
-    
+ 
     private var menuRows: some View {
         VStack(spacing: 10) {
             MenuRow(systemImage: "house.fill", title: "My Profile") { isPresentingEditor = true }
@@ -105,9 +107,10 @@ struct ProfileView: View {
             MenuRow(systemImage: "calendar", title: "Schedule")
             MenuRow(systemImage: "square.and.pencil", title: "Preferences")
             MenuRow(systemImage: "line.3.horizontal", title: "Settings")
+            MenuRow(systemImage: "info.circle", title: "About") { isShowingAbout = true }
         }
     }
-    
+ 
     private var signOutButton: some View {
         Button(role: .destructive, action: signOut) {
             Text("Sign Out").frame(maxWidth: .infinity)
@@ -116,11 +119,11 @@ struct ProfileView: View {
         .controlSize(.large)
         .padding(.top, 10)
     }
-    
+ 
     private var errorIsPresented: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
-    
+ 
     private func updateStatus(_ status: UserStatus) {
         guard let userID = authService.user?.uid else { return }
         Task {
@@ -128,7 +131,7 @@ struct ProfileView: View {
             catch { errorMessage = error.localizedDescription }
         }
     }
-    
+ 
     private func setInvisible(_ invisible: Bool) {
         guard let userID = authService.user?.uid else { return }
         Task {
@@ -136,7 +139,7 @@ struct ProfileView: View {
             catch { errorMessage = error.localizedDescription }
         }
     }
-    
+ 
     private func signOut() {
         guard let userID = authService.user?.uid else { return }
         Task {
