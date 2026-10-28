@@ -5,6 +5,8 @@
 //  Created by Rafa Abes on 10/23/26.
 //
 
+
+
 import Foundation
 import Speech
 import AVFoundation
@@ -30,6 +32,11 @@ final class SpeechRecognizer: ObservableObject {
     @Published private(set) var activeOwnerID: String?
     @Published private(set) var errorMessage: String?
     @Published private(set) var errorOwnerID: String?
+ 
+    /// Words the recogniser should expect. Stops "Happ" being heard as "app".
+    nonisolated static let contextualStrings = [
+        "Happ", "Happs", "a Happ", "Monash", "Matheson Library", "Campus Centre"
+    ]
  
     private let maxSeconds = 60
     private var engine: AVAudioEngine?
@@ -77,6 +84,8 @@ final class SpeechRecognizer: ObservableObject {
             // Do not force on-device: if the en-AU model is not installed, recognition
             // fails instantly. Let iOS choose (on-device when ready, server otherwise).
             request.requiresOnDeviceRecognition = false
+            // Hints so "Happ" is not heard as "app". Helps, but is not a guarantee.
+            request.contextualStrings = Self.contextualStrings
             let newBox = RecognitionRequestBox(request)
             let newEngine = AVAudioEngine()
             Self.installTap(on: newEngine, box: newBox)
