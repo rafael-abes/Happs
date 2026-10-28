@@ -66,7 +66,7 @@ struct AssistantSheet: View {
                 TextEditor(text: $sentence)
                     .frame(minHeight: 100)
                     .accessibilityLabel("Describe your Happ")
-                MicButton(text: $sentence, id: "assistant")
+                MicButton(text: $sentence, id: "assistant", fixesHapp: true)
             }
             Button {
                 generate()
