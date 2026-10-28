@@ -40,6 +40,13 @@ struct NotificationsView: View {
                         } else {
                             List(filtered) { item in
                                 row(item)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) {
+                                            Task { await notificationStore.deleteNotification(item) }
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                             }
                         }
                     }

@@ -58,6 +58,11 @@ struct AboutView: View {
             detail: "Lab exercises and lecture content, Monash University.",
             url: nil
         ),
+        Credit(
+            name: "Supabase",
+            detail: "Private photo storage for Happ recaps. supabase-swift, MIT licence.",
+            url: URL(string: "https://github.com/supabase/supabase-swift")
+        ),
     ]
  
     private var versionText: String {

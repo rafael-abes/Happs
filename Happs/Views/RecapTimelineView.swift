@@ -1,0 +1,215 @@
+//
+//  RecapTimelineView.swift
+//  Happs
+//
+//  Created by Rafa Abes on 10/27/26.
+//
+import SwiftUI
+import FirebaseAuth
+
+/// Loads one private photo through a signed URL.
+struct RecapImageView: View {
+    let path: String
+
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else if failed {
+                Label("Couldn't load photo", systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(height: 120)
+            } else {
+                ProgressView().frame(height: 160)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .task(id: path) {
+            do {
+                image = try await RecapImageLoader.shared.image(for: path)
+                failed = false
+            } catch {
+                failed = true
+            }
+        }
+    }
+}
+
+/// The recap page for one Happ. Attendees see the shared timeline and can add photos.
+/// Everyone else sees the locked preview.
+struct RecapTimelineView: View {
+    let happ: Happ
+
+    @EnvironmentObject private var authService: AuthService
+    @EnvironmentObject private var recapStore: RecapStore
+
+    @State private var now = Date()
+    @State private var showsAdd = false
+    @State private var pendingDelete: Recap?
+
+    private var userID: String { authService.user?.uid ?? "" }
+    private var isAttendee: Bool { happ.containsParticipant(userID) }
+    private var endsAt: Date { happ.effectiveEndTime }
+    private var windowOpen: Bool { RecapRules.isWindowOpen(endsAt: endsAt, now: now) }
+    private var recaps: [Recap] { recapStore.recapsByHapp[happ.id] ?? [] }
+    private var previews: [RecapPreview] { recapStore.previewsByHapp[happ.id] ?? [] }
+    private var myCount: Int { recaps.filter { $0.authorID == userID }.count }
+    private var slotsLeft: Int { max(0, RecapRules.maxPhotosPerPerson - myCount) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                if isAttendee {
+                    addSection
+                    timeline
+                } else {
+                    LockedRecapCard(happ: happ, previews: previews)
+                        .padding(14)
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+                    Text("Only people who joined this Happ can see its photos.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(20)
+        }
+        .navigationTitle("Recap")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showsAdd) {
+            AddRecapSheet(happ: happ, slotsLeft: slotsLeft)
+        }
+        .confirmationDialog(
+            "Delete this photo?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { recap in
+            Button("Delete Photo", role: .destructive) {
+                Task { await recapStore.delete(recap) }
+            }
+            Button("Keep", role: .cancel) { }
+        }
+        .alert("Something Went Wrong", isPresented: Binding(
+            get: { recapStore.errorMessage != nil },
+            set: { if !$0 { recapStore.errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { recapStore.errorMessage = nil }
+        } message: {
+            Text(recapStore.errorMessage ?? "Please try again.")
+        }
+        .task(id: happ.id) {
+            if isAttendee {
+                recapStore.observeRecaps(happID: happ.id)
+            } else {
+                recapStore.ensurePreviews(happID: happ.id)
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                now = Date()
+            }
+        }
+        .onDisappear { recapStore.stopRecaps(happID: happ.id) }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(happ.title).font(.title2.bold())
+            Text("\(happ.category.rawValue) at \(happ.location)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text(endsAt.formatted(date: .abbreviated, time: .shortened))
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    @ViewBuilder
+    private var addSection: some View {
+        if now < endsAt {
+            note("Recaps open when this Happ ends.")
+        } else if !windowOpen {
+            note("The \(RecapRules.windowHours) hour window to add photos has closed.")
+        } else if slotsLeft == 0 {
+            note("You've added all \(RecapRules.maxPhotosPerPerson) of your photos.")
+        } else {
+            Button {
+                showsAdd = true
+            } label: {
+                Label("Add your recap", systemImage: "plus.circle.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(Color.happsGreen, in: Capsule())
+                    .foregroundStyle(.white)
+            }
+            Text("\(slotsLeft) \(slotsLeft == 1 ? "photo" : "photos") left. The window closes \(RecapRules.windowCloses(endsAt: endsAt).formatted(date: .abbreviated, time: .shortened)).")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder
+    private var timeline: some View {
+        Text("Shared timeline").font(.headline)
+        if recaps.isEmpty {
+            ContentUnavailableView(
+                "No recaps yet",
+                systemImage: "photo.on.rectangle.angled",
+                description: Text("Photos from this Happ will show up here.")
+            )
+        } else {
+            ForEach(recaps) { recap in
+                recapCard(recap)
+            }
+        }
+    }
+
+    private func recapCard(_ recap: Recap) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(recap.authorName).font(.subheadline.weight(.semibold))
+                    Text(recap.createdAt.formatted(.relative(presentation: .named)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if recap.authorID == userID {
+                    Button {
+                        pendingDelete = recap
+                    } label: {
+                        Image(systemName: "trash")
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Delete photo")
+                }
+            }
+            RecapImageView(path: recap.storagePath)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            if !recap.caption.isEmpty {
+                Text(recap.caption).font(.subheadline)
+            }
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+

@@ -35,6 +35,7 @@ private struct AuthenticatedRootView: View {
     @StateObject private var groupStore = GroupStore()
     @StateObject private var notificationStore = NotificationStore()
     @StateObject private var aiService = AIService()
+    @StateObject private var recapStore = RecapStore()
     
     var body: some View {
         Group {
@@ -56,6 +57,7 @@ private struct AuthenticatedRootView: View {
         .environmentObject(groupStore)
         .environmentObject(notificationStore)
         .environmentObject(aiService)
+        .environmentObject(recapStore)
         .task { await aiService.refreshConfig() }
         .onChange(of: authService.user?.uid, initial: true) { _, userID in
             if let userID {
@@ -84,6 +86,7 @@ private struct AuthenticatedRootView: View {
             locationService.refreshNow()
             friendStore.refreshClock()
         }
+        .onChange(of: authService.user?.uid) { _, _ in recapStore.stopAll() }
     }
 }
 

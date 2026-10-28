@@ -4,28 +4,29 @@
 //
 //  Created by Rafa Abes on 9/21/26.
 //
+
 import SwiftUI
 import FirebaseAuth
-
+ 
 struct HappDetailView: View {
     private enum PendingAction {
         case leave, cancel
     }
-    
+ 
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
     @Environment(\.dismiss) private var dismiss
     let happID: String
-    
+ 
     @State private var isWorking = false
     @State private var isEditing = false
     @State private var pendingAction: PendingAction?
     @State private var errorMessage: String?
-    
+ 
     private var happ: Happ? {
         happStore.happs.first { $0.id == happID }
     }
-    
+ 
     var body: some View {
         Group {
             if let happ, let currentUserID = authService.user?.uid {
@@ -42,11 +43,10 @@ struct HappDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let happ {
-                    ToolbarItem(placement: .primaryAction) {
-                        SpeakButton(id: happ.id, text: happ.spokenSummary)
-                    }
+                ToolbarItem(placement: .primaryAction) {
+                    SpeakButton(id: happ.id, text: happ.spokenSummary)
+                }
             }
-            
             if let happ, happ.creatorID == authService.user?.uid {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Edit") { isEditing = true }
@@ -83,13 +83,13 @@ struct HappDetailView: View {
             Text(errorMessage ?? "Please try again.")
         }
     }
-    
+ 
     private func content(for happ: Happ, currentUserID: String) -> some View {
         List {
             Section {
                 Text(happ.details.isEmpty ? "No description added." : happ.details)
             }
-            
+ 
             Section("Details") {
                 LabeledContent("Category", value: happ.category.rawValue)
                 LabeledContent("Location", value: happ.location)
@@ -97,7 +97,17 @@ struct HappDetailView: View {
                 LabeledContent("Organiser", value: happ.creatorName)
                 LabeledContent("Going", value: "\(happ.participantIDs.count)")
             }
-            
+ 
+            if happ.hasEnded(at: Date()) {
+                Section {
+                    NavigationLink {
+                        RecapTimelineView(happ: happ)
+                    } label: {
+                        Label("Recap", systemImage: "photo.on.rectangle.angled")
+                    }
+                }
+            }
+ 
             Section {
                 if happ.creatorID == currentUserID {
                     Button("Cancel Happ", role: .destructive) { pendingAction = .cancel }
@@ -114,20 +124,20 @@ struct HappDetailView: View {
             }
         }
     }
-    
+ 
     private var pendingIsPresented: Binding<Bool> {
         Binding(get: { pendingAction != nil }, set: { if !$0 { pendingAction = nil } })
     }
-    
+ 
     private var errorIsPresented: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
-    
+ 
     private func leaveHapp() {
         guard let happ, let userID = authService.user?.uid else { return }
         setParticipation(happ: happ, userID: userID, isJoining: false)
     }
-    
+ 
     private func setParticipation(happ: Happ, userID: String, isJoining: Bool) {
         isWorking = true
         Task {
@@ -139,7 +149,7 @@ struct HappDetailView: View {
             }
         }
     }
-    
+ 
     private func deleteHapp() {
         guard let happ else { return }
         isWorking = true

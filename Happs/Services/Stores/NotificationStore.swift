@@ -123,4 +123,17 @@ final class NotificationStore: ObservableObject {
         )
         Task { try? await UNUserNotificationCenter.current().add(request) }
     }
+    /// Deletes one notification. The Firestore rules already allow the recipient to delete,
+        /// and the existing snapshot listener removes the row and updates the badge.
+    func deleteNotification(_ item: AppNotification) async {
+        let id: String? = item.id   // works whether id is String or String?
+        guard let id else { return }
+        do {
+            try await Firestore.firestore().collection("notifications").document(id).delete()
+        } catch {
+            #if DEBUG
+            print("Delete notification failed: \(error)")
+            #endif
+        }
+    }
 }
