@@ -1,6 +1,14 @@
+//
+//  GoogleUserMapTests.swift
+//  Happs
+//
+//  Created by Rafa Abes on 10/28/26.
+//
+
 
 import XCTest
 import CoreLocation
+import FirebaseFirestore
 @testable import Happs
  
 /// Regression tests for: "Google sign-in users did not appear on friends' maps".
@@ -10,14 +18,14 @@ import CoreLocation
 /// never reached the map. These tests prove the tolerant decoding that fixed it, plus the
 /// campus geometry that decides who is "on campus".
 ///
-/// ADAPTER: the only line that depends on the exact signature of your decoder.
-/// If `UserProfile.tolerant` takes a DocumentSnapshot instead of a dictionary, add a
-/// dictionary entry point to UserProfile and call that here.
+/// These call `UserProfile.tolerant(id:data:)`, the fallback path of `tolerant(from:)`.
+/// It is the code that runs when strict decoding fails, which is what happened to old
+/// Google profiles. (`tolerant(from:)` needs a Firestore snapshot, so it cannot be built here.)
 @MainActor
 final class GoogleUserMapTests: XCTestCase {
  
     private func decodeProfile(id: String = "google-user", _ data: [String: Any]) -> UserProfile? {
-        UserProfile.tolerant(id: id, data: data)   // <- adjust to your real signature
+        UserProfile.tolerant(id: id, data: data)
     }
  
     // What an old Google profile looked like: name and email only.
@@ -104,6 +112,55 @@ final class GoogleUserMapTests: XCTestCase {
         XCTAssertEqual(profile.status, .busy)
         XCTAssertFalse(profile.isVisible, "An explicit Invisible Mode setting must be respected, not overwritten by the default")
         XCTAssertEqual(profile.friendIDs, ["a", "b"])
+    }
+ 
+    // MARK: Identity and presence fields
+ 
+    func testDocumentIDIsKept() throws {
+        let profile = try XCTUnwrap(decodeProfile(id: "uid-123", bareGoogleProfile))
+        XCTAssertEqual(profile.id, "uid-123", "The friend must keep their Firebase UID or their pin cannot be matched")
+    }
+ 
+    func testPresenceFieldsAreKeptWhenPresent() throws {
+        let seen = Date(timeIntervalSince1970: 1_800_000_000)
+        var data = bareGoogleProfile
+        data["isOnCampus"] = true
+        data["lastSeenAt"] = Timestamp(date: seen)
+        let profile = try XCTUnwrap(decodeProfile(data))
+        XCTAssertEqual(profile.isOnCampus, true)
+        XCTAssertEqual(profile.lastSeenAt, seen)
+    }
+ 
+    func testMissingNameAndEmailGetSafeDefaults() throws {
+        let profile = try XCTUnwrap(decodeProfile([:]))
+        XCTAssertEqual(profile.displayName, "Happs User")
+        XCTAssertEqual(profile.email, "")
+    }
+ 
+    // MARK: Freshness (a friend fades off the map after 180 seconds of silence)
+ 
+    func testRecentHeartbeatIsFresh() {
+        let now = Date()
+        XCTAssertTrue(Freshness.isFresh(now.addingTimeInterval(-60), now: now, missingIsFresh: false))
+        XCTAssertTrue(Freshness.isFresh(now.addingTimeInterval(-179), now: now, missingIsFresh: false))
+    }
+ 
+    func testOldHeartbeatIsStale() {
+        let now = Date()
+        XCTAssertFalse(Freshness.isFresh(now.addingTimeInterval(-180), now: now, missingIsFresh: false))
+        XCTAssertFalse(Freshness.isFresh(now.addingTimeInterval(-600), now: now, missingIsFresh: true))
+    }
+ 
+    func testMissingTimestampFollowsTheFlag() {
+        let now = Date()
+        XCTAssertTrue(Freshness.isFresh(nil, now: now, missingIsFresh: true))
+        XCTAssertFalse(Freshness.isFresh(nil, now: now, missingIsFresh: false))
+    }
+ 
+    func testClockSkewIntoTheFutureCountsAsFresh() {
+        let now = Date()
+        XCTAssertTrue(Freshness.isFresh(now.addingTimeInterval(30), now: now, missingIsFresh: false),
+                      "A friend whose clock is slightly ahead must not disappear")
     }
  
     // MARK: Campus geometry (decides who counts as on campus)

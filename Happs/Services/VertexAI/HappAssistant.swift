@@ -8,7 +8,6 @@ import Foundation
 import CoreLocation
 import MapKit
 
-// ASSUMPTION (check against your file): HappCategory is `enum HappCategory: String, CaseIterable`
 // with cases food, sport, study, happs and raw values "Food", "Sport", "Study", "Happs".
 extension HappCategory {
     static func fromAI(_ text: String?) -> HappCategory {

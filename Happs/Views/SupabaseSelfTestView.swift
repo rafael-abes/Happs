@@ -1,3 +1,11 @@
+//
+//  SupabaseSelfTestView.swift
+//  Happs
+//
+//  Created by Rafa Abes on 10/27/26.
+//
+
+
 import SwiftUI
 
 /// F0 check. Temporary: reach it from a DEBUG-only row, then remove once it passes.
