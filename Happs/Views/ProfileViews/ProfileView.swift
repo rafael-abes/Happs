@@ -18,6 +18,7 @@ struct ProfileView: View {
     @State private var isPresentingEditor = false
     @State private var isPresentingNotifications = false
     @State private var isShowingAbout = false
+    @State private var isShowingPrivacy = false
     @State private var errorMessage: String?
 
     private var notificationsTitle: String {
@@ -43,6 +44,7 @@ struct ProfileView: View {
             }
             .navigationTitle("Me")
             .navigationDestination(isPresented: $isShowingAbout) { AboutView() }
+            .navigationDestination(isPresented: $isShowingPrivacy) { PrivacySafetyView() }
             .sheet(isPresented: $isPresentingEditor) { ProfileEditorView() }
             .sheet(isPresented: $isPresentingNotifications) { NotificationsView() }
             .alert("Something Went Wrong", isPresented: errorIsPresented) {
@@ -55,7 +57,7 @@ struct ProfileView: View {
 
     private var header: some View {
         VStack(spacing: 6) {
-            AvatarView(symbol: profileStore.profile?.avatarSymbol, size: avatarSize)
+            AvatarView(symbol: profileStore.profile?.avatarSymbol, photo: profileStore.profile?.avatarPhoto, size: avatarSize)
             Text(authService.user?.displayName ?? "Happs User")
                 .font(.title2.bold())
                 .accessibilityAddTraits(.isHeader)
@@ -122,6 +124,7 @@ struct ProfileView: View {
             MenuRow(systemImage: "calendar", title: "Schedule", hint: "Not available yet.")
             MenuRow(systemImage: "square.and.pencil", title: "Preferences", hint: "Not available yet.")
             MenuRow(systemImage: "line.3.horizontal", title: "Settings", hint: "Not available yet.")
+            MenuRow(systemImage: "hand.raised.fill", title: "Privacy and Safety", hint: "Blocked people, Gemini permission, policies and account deletion.") { isShowingPrivacy = true }
             MenuRow(systemImage: "info.circle", title: "About", hint: "About Happs, the developer and credits.") { isShowingAbout = true }
         }
     }
