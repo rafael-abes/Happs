@@ -18,6 +18,10 @@ struct HappDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let happID: String
  
+    @EnvironmentObject private var safetyStore: SafetyStore
+    @EnvironmentObject private var friendStore: FriendStore
+    @State private var reportTarget: ReportTarget?
+    @State private var pendingBlock: Happ?
     @State private var isWorking = false
     @State private var isEditing = false
     @State private var pendingAction: PendingAction?
@@ -47,6 +51,26 @@ struct HappDetailView: View {
                     SpeakButton(id: happ.id, text: happ.spokenSummary, subject: happ.title)
                 }
             }
+            if let happ, happ.creatorID != authService.user?.uid {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Report Happ", systemImage: "flag") {
+                            reportTarget = ReportTarget(
+                                kind: .happ, targetID: happ.id, happID: happ.id,
+                                offenderID: happ.creatorID, offenderName: happ.creatorName,
+                                summary: happ.title, hideID: happ.id
+                            )
+                        }
+                        Button("Block \(happ.creatorName)", systemImage: "hand.raised", role: .destructive) {
+                            pendingBlock = happ
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel("More options")
+                    .accessibilityHint("Report this Happ or block the organiser.")
+                }
+            }
             if let happ, happ.creatorID == authService.user?.uid {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Edit") { isEditing = true }
@@ -54,6 +78,29 @@ struct HappDetailView: View {
                         .accessibilityHint("Change the title, place or time.")
                 }
             }
+        }
+        .sheet(item: Binding(
+            get: { reportTarget.map { ReportItem(target: $0) } },
+            set: { if $0 == nil { reportTarget = nil } }
+        )) { item in
+            ReportSheet(target: item.target)
+        }
+        .confirmationDialog(
+            "Block this person?",
+            isPresented: Binding(get: { pendingBlock != nil }, set: { if !$0 { pendingBlock = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingBlock
+        ) { happ in
+            Button("Block \(happ.creatorName)", role: .destructive) {
+                guard let uid = authService.user?.uid else { return }
+                Task {
+                    await safetyStore.block(userID: happ.creatorID, name: happ.creatorName, currentUserID: uid, friendStore: friendStore)
+                    dismiss()
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { happ in
+            Text("You'll stop seeing \(happ.creatorName)'s Happs and photos, and you'll no longer be friends.")
         }
         .sheet(isPresented: $isEditing) {
             if let happ {
@@ -89,7 +136,7 @@ struct HappDetailView: View {
     private func content(for happ: Happ, currentUserID: String) -> some View {
         List {
             Section {
-                Text(happ.details.isEmpty ? "No description added." : happ.details)
+                Text(happ.details.isEmpty ? "No description added." : ContentFilter.displayText(happ.details))
             }
  
             Section("Details") {
@@ -183,3 +230,9 @@ struct HappDetailView: View {
         }
     }
 }
+
+private struct ReportItem: Identifiable {
+    let target: ReportTarget
+    var id: String { target.kind.rawValue + target.targetID }
+}
+

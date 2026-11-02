@@ -11,54 +11,61 @@ import Combine
 
 @MainActor
 final class HappStore: ObservableObject {
-    @Published private(set) var happs: [Happ] = []
+    @Published private(set) var allHapps: [Happ] = []
+    /// Set from ContentView (SafetyStore). Happs from blocked people, or hidden after a report, are left out.
+    @Published var blockedIDs: Set<String> = []
+    @Published var hiddenIDs: Set<String> = []
+    
+    var happs: [Happ] {
+        allHapps.filter { !blockedIDs.contains($0.creatorID) && !hiddenIDs.contains($0.id) }
+    }
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
-    
+
     private let database: Firestore
     private let notifications: NotificationWriter
     private var listener: ListenerRegistration?
-    
+
     init(database: Firestore = .firestore()) {
         self.database = database
         self.notifications = NotificationWriter(database: database)
     }
-    
+
     func startListening() {
         guard listener == nil else { return }
         isLoading = true
-        
+
         listener = database.collection(Happ.collectionName)
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
                     self.isLoading = false
-                    
+
                     if let error {
                         self.errorMessage = error.localizedDescription
                         return
                     }
-                    
-                    self.happs = (snapshot?.documents ?? [])
+
+                    self.allHapps = (snapshot?.documents ?? [])
                         .compactMap { try? $0.data(as: Happ.self) }
                         .sorted { $0.startTime < $1.startTime }
                 }
             }
     }
-    
+
     func stopListening() {
         listener?.remove()
         listener = nil
         isLoading = false
-        happs = []
+        allHapps = []
     }
-    
+
     func clearError() {
         errorMessage = nil
     }
-    
+
     // MARK: - Create, update, delete
-    
+
     /// `invitedIDs` get a personal invitation wherever they are. `audienceIDs` (friends on
     /// campus right now) get the broadcast "New Happ" notification.
     func createHapp(
@@ -77,12 +84,13 @@ final class HappStore: ObservableObject {
         audienceIDs: [String] = []
     ) async throws {
         let checked = try validated(title: title, location: location, startTime: startTime, endTime: endTime)
-        
+        try ContentFilter.validate(details, field: "details")
+
         let effectiveEnd = endTime ?? startTime.addingTimeInterval(Happ.defaultDuration)
         guard effectiveEnd > Date() else {
             throw AppError.invalidForm("That time has already passed.")
         }
-        
+
         let happ = Happ(
             title: checked.title,
             details: details.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -98,10 +106,10 @@ final class HappStore: ObservableObject {
             isOffCampus: isOffCampus ? true : nil,
             invitedIDs: invitedIDs.isEmpty ? nil : invitedIDs
         )
-        
+
         let data = try Firestore.Encoder().encode(happ)
         try await database.collection(Happ.collectionName).document().setData(data)
-        
+
         await notifyAboutNewHapp(
             title: checked.title,
             creatorID: creatorID,
@@ -110,7 +118,7 @@ final class HappStore: ObservableObject {
             audienceIDs: audienceIDs
         )
     }
-    
+
     func updateHapp(
         _ happ: Happ,
         title: String,
@@ -124,7 +132,8 @@ final class HappStore: ObservableObject {
         isOffCampus: Bool
     ) async throws {
         let checked = try validated(title: title, location: location, startTime: startTime, endTime: endTime)
-        
+        try ContentFilter.validate(details, field: "details")
+
         var fields: [String: Any] = [
             "title": checked.title,
             "details": details.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -145,9 +154,9 @@ final class HappStore: ObservableObject {
             fields["latitude"] = FieldValue.delete()
             fields["longitude"] = FieldValue.delete()
         }
-        
+
         try await database.collection(Happ.collectionName).document(happ.id).updateData(fields)
-        
+
         let others = happ.participantIDs.filter { $0 != happ.creatorID }
         let drafts = others.map {
             NotificationDraft(
@@ -159,10 +168,10 @@ final class HappStore: ObservableObject {
         }
         await notifications.send(drafts, from: happ.creatorID)
     }
-    
+
     func deleteHapp(_ happ: Happ) async throws {
         try await database.collection(Happ.collectionName).document(happ.id).delete()
-        
+
         let others = happ.participantIDs.filter { $0 != happ.creatorID }
         let drafts = others.map {
             NotificationDraft(
@@ -174,24 +183,24 @@ final class HappStore: ObservableObject {
         }
         await notifications.send(drafts, from: happ.creatorID)
     }
-    
+
     // MARK: - Joining and leaving
-    
+
     func toggleParticipation(happID: String, userID: String, isJoining: Bool) async throws {
         let currentHapp = happs.first { $0.id == happID }
-        
+
         // A Happ with no host is meaningless, so the creator leaving deletes it.
         if !isJoining, let host = currentHapp, host.creatorID == userID {
             try await deleteHapp(host)
             return
         }
-        
+
         let reference = database.collection(Happ.collectionName).document(happID)
         let update: [String: Any] = [
             "participantIDs": isJoining ? FieldValue.arrayUnion([userID]) : FieldValue.arrayRemove([userID])
         ]
         try await reference.updateData(update)
-        
+
         guard let happ = currentHapp else { return }
         let name = NotificationWriter.actorName
         let draft = NotificationDraft(
@@ -202,9 +211,9 @@ final class HappStore: ObservableObject {
         )
         await notifications.send([draft], from: userID)
     }
-    
+
     // MARK: - Helpers
-    
+
     private func validated(
         title: String,
         location: String,
@@ -213,7 +222,9 @@ final class HappStore: ObservableObject {
     ) throws -> (title: String, location: String) {
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedLocation = location.trimmingCharacters(in: .whitespacesAndNewlines)
-        
+        try ContentFilter.validate(cleanedTitle, field: "title")
+        try ContentFilter.validate(cleanedLocation, field: "location")
+
         guard !cleanedTitle.isEmpty else {
             throw AppError.invalidForm("Give your happ a title.")
         }
@@ -228,7 +239,7 @@ final class HappStore: ObservableObject {
         }
         return (cleanedTitle, cleanedLocation)
     }
-    
+
     private func notifyAboutNewHapp(
         title: String,
         creatorID: String,

@@ -16,6 +16,9 @@ struct FriendsListView: View {
     @State private var isPresentingAddFriends = false
     @State private var showsMap = false
     @State private var friendPendingRemoval: UserProfile?
+    @EnvironmentObject private var safetyStore: SafetyStore
+    @State private var reportTarget: ReportTarget?
+    @State private var blockCandidate: (id: String, name: String)?
     
     var body: some View {
         NavigationStack {
@@ -41,6 +44,24 @@ struct FriendsListView: View {
                 }
             }
             .sheet(isPresented: $isPresentingAddFriends) { AddFriendsView() }
+            .sheet(item: Binding(
+                get: { reportTarget.map { FriendReportItem(target: $0) } },
+                set: { if $0 == nil { reportTarget = nil } }
+            )) { item in
+                ReportSheet(target: item.target)
+            }
+            .confirmationDialog(
+                "Block this person?",
+                isPresented: Binding(get: { blockCandidate != nil }, set: { if !$0 { blockCandidate = nil } }),
+                titleVisibility: .visible
+            ) {
+                if let candidate = blockCandidate {
+                    Button("Block \(candidate.name)", role: .destructive) { block(candidate.id, candidate.name) }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("They won't be able to see you on the map, and you won't see their Happs or photos. You can unblock them in Me > Privacy and Safety.")
+            }
             .confirmationDialog(
                 "Remove friend?",
                 isPresented: removalIsPresented,
@@ -123,7 +144,7 @@ struct FriendsListView: View {
         return layout {
             HStack {
                 AvatarView(
-                    symbol: friend.avatarSymbol,
+                    symbol: friend.avatarSymbol, photo: friend.avatarPhoto,
                     size: 36,
                     ringColor: friend.isVisible ? friend.status.color : nil,
                     badgeSymbol: friend.isVisible ? friend.status.symbolName : nil
@@ -151,8 +172,14 @@ struct FriendsListView: View {
             )
         )
         .accessibilityAction(named: "Remove \(friend.displayName)") { friendPendingRemoval = friend }
+        .accessibilityAction(named: "Block \(friend.displayName)") { blockCandidate = (friend.id, friend.displayName) }
+        .accessibilityAction(named: "Report \(friend.displayName)") { report(friend) }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button("Remove", role: .destructive) { friendPendingRemoval = friend }
+        }
+        .contextMenu {
+            Button("Report profile", systemImage: "flag") { report(friend) }
+            Button("Block", systemImage: "hand.raised", role: .destructive) { blockCandidate = (friend.id, friend.displayName) }
         }
     }
     
@@ -163,6 +190,14 @@ struct FriendsListView: View {
             onAccept: { respond(request, accept: true) },
             onDecline: { respond(request, accept: false) }
         )
+        .accessibilityAction(named: "Block \(request.fromDisplayName)") {
+            blockCandidate = (request.fromUserID, request.fromDisplayName)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button("Block", role: .destructive) {
+                blockCandidate = (request.fromUserID, request.fromDisplayName)
+            }
+        }
     }
     
     private var removalIsPresented: Binding<Bool> {
@@ -191,9 +226,30 @@ struct FriendsListView: View {
         }
     }
     
+    private func report(_ friend: UserProfile) {
+        reportTarget = ReportTarget(
+            kind: .profile, targetID: friend.id, happID: nil,
+            offenderID: friend.id, offenderName: friend.displayName,
+            summary: "Profile of \(friend.displayName)", hideID: nil
+        )
+    }
+    
+    private func block(_ id: String, _ name: String) {
+        guard let userID = authService.user?.uid else { return }
+        Task {
+            await safetyStore.block(userID: id, name: name, currentUserID: userID, friendStore: friendStore)
+            AccessibilityNotification.Announcement("\(name) blocked.").post()
+        }
+    }
+    
     private func remove(_ friend: UserProfile) {
         guard let userID = authService.user?.uid else { return }
         Task { await friendStore.removeFriend(friend.id, currentUserID: userID) }
     }
+}
+
+private struct FriendReportItem: Identifiable {
+    let target: ReportTarget
+    var id: String { target.kind.rawValue + target.targetID }
 }
 

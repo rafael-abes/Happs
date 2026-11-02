@@ -21,6 +21,7 @@ struct GroupDetailView: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var isEditing = false
+    @State private var reportTarget: ReportTarget?
     @State private var pendingAction: PendingAction?
     
     private var group: FriendGroup? {
@@ -62,6 +63,20 @@ struct GroupDetailView: View {
         .navigationTitle(group.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if group.ownerID != currentUserID {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Report", systemImage: "flag") {
+                        reportTarget = ReportTarget(
+                            kind: .group, targetID: group.id, happID: nil,
+                            offenderID: group.ownerID,
+                            offenderName: groupStore.names[group.ownerID] ?? "Group owner",
+                            summary: group.name, hideID: nil
+                        )
+                    }
+                    .accessibilityLabel("Report group")
+                    .accessibilityHint("Tells Happs this group breaks the community rules.")
+                }
+            }
             if group.ownerID == currentUserID {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Edit") { isEditing = true }
@@ -71,6 +86,12 @@ struct GroupDetailView: View {
             }
         }
         .sheet(isPresented: $isEditing) { GroupEditorView(group: group) }
+        .sheet(item: Binding(
+            get: { reportTarget.map { GroupReportItem(target: $0) } },
+            set: { if $0 == nil { reportTarget = nil } }
+        )) { item in
+            ReportSheet(target: item.target)
+        }
         .confirmationDialog(
             pendingAction == .delete ? "Delete this group?" : "Leave this group?",
             isPresented: pendingIsPresented,
@@ -182,4 +203,9 @@ struct GroupDetailView: View {
             dismiss()
         }
     }
+}
+
+private struct GroupReportItem: Identifiable {
+    let target: ReportTarget
+    var id: String { target.kind.rawValue + target.targetID }
 }
