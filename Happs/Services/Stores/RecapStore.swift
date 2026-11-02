@@ -22,6 +22,9 @@ final class RecapStore: ObservableObject {
     @Published private(set) var previewsByHapp: [String: [RecapPreview]] = [:]
     @Published private(set) var recapsByHapp: [String: [Recap]] = [:]
     @Published var errorMessage: String?
+    /// Set from ContentView (SafetyStore).
+    @Published var blockedIDs: Set<String> = []
+    @Published var hiddenIDs: Set<String> = []
 
     private var db: Firestore { Firestore.firestore() }
     private let storage = SupabaseStorageService.shared
@@ -87,11 +90,33 @@ final class RecapStore: ObservableObject {
         recapsByHapp = [:]
     }
 
+    // MARK: Safe views of the data (blocked people, hidden photos, filtered captions)
+    
+    /// Hide key for a recap: its storage path with "/" replaced, which is unique per photo.
+    static func hideID(for recap: Recap) -> String { ReportTarget.safeID(recap.storagePath) }
+    
+    func visibleRecaps(_ happID: String) -> [Recap] {
+        (recapsByHapp[happID] ?? []).filter {
+            !blockedIDs.contains($0.authorID) && !hiddenIDs.contains(Self.hideID(for: $0))
+        }
+    }
+    
+    func visiblePreviews(_ happID: String) -> [RecapPreview] {
+        (previewsByHapp[happID] ?? []).filter { !blockedIDs.contains($0.authorID) }
+    }
+    
     // MARK: Writes
 
     /// Uploads each photo, then writes both Firestore documents in one batch.
     /// If the batch fails the uploaded file is deleted again.
-    func post(happID: String, userID: String, authorName: String, drafts: [RecapDraft]) async throws {
+    func post(
+        happID: String,
+        userID: String,
+        authorName: String,
+        drafts: [RecapDraft],
+        notify: RecapAudience? = nil
+    ) async throws {
+        for draft in drafts { try ContentFilter.validate(draft.caption, field: "caption") }
         let base = db.collection("happs").document(happID)
         let mine = try await base.collection("recaps")
             .whereField("authorID", isEqualTo: userID)
@@ -122,6 +147,28 @@ final class RecapStore: ObservableObject {
                 try? await storage.remove(path)
                 throw error
             }
+        }
+
+        if let notify {
+            let drafts = RecapNotifications.drafts(for: notify, authorID: userID, authorName: authorName, photoCount: drafts.count)
+            await NotificationWriter(database: db).send(drafts, from: userID)
+        }
+    }
+
+    /// Account deletion: removes every recap this user posted, wherever it is.
+    func removeAll(forAuthor userID: String) async {
+        guard let snapshot = try? await db.collectionGroup("recaps")
+            .whereField("authorID", isEqualTo: userID).getDocuments() else { return }
+        for document in snapshot.documents {
+            let batch = db.batch()
+            batch.deleteDocument(document.reference)
+            if let previews = document.reference.parent.parent?.collection("recapPreviews") {
+                batch.deleteDocument(previews.document(document.documentID))
+            }
+            if let path = document.data()["storagePath"] as? String {
+                try? await storage.remove(path)
+            }
+            try? await batch.commit()
         }
     }
 

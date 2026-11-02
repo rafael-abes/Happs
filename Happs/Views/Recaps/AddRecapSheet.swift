@@ -17,6 +17,7 @@ struct AddRecapSheet: View {
 
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var recapStore: RecapStore
+    @EnvironmentObject private var profileStore: ProfileStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -136,7 +137,12 @@ struct AddRecapSheet: View {
                     happID: happ.id,
                     userID: user.uid,
                     authorName: user.displayName ?? user.email ?? "Someone",
-                    drafts: drafts
+                    drafts: drafts,
+                    notify: RecapAudience(
+                        happTitle: happ.title,
+                        attendeeIDs: happ.participantIDs,
+                        friendIDs: profileStore.profile?.friendIDs ?? []
+                    )
                 )
                 dismiss()
             } catch {

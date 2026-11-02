@@ -12,32 +12,39 @@ import Combine
 
 @MainActor
 final class NotificationStore: ObservableObject {
-    @Published private(set) var notifications: [AppNotification] = []
-    
+    @Published private(set) var allNotifications: [AppNotification] = []
+    /// People the user has blocked. Set from ContentView.
+    @Published var blockedIDs: Set<String> = []
+
+    /// What the screens show: everything except blocked people.
+    var notifications: [AppNotification] {
+        allNotifications.filter { !blockedIDs.contains($0.actorID) }
+    }
+
     var unreadCount: Int {
         notifications.filter { !$0.isRead }.count
     }
-    
+
     private let database: Firestore
     private var listener: ListenerRegistration?
     private var liveSince = Date()
     private var deliveredIDs: Set<String> = []
-    
+
     init(database: Firestore = .firestore()) {
         self.database = database
     }
-    
+
     func requestPermission() {
         Task {
             _ = try? await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound, .badge])
         }
     }
-    
+
     func startListening(for userID: String) {
         guard listener == nil else { return }
         liveSince = Date().addingTimeInterval(-10)
-        
+
         listener = database.collection(AppNotification.collectionName)
             .whereField("recipientID", isEqualTo: userID)
             .addSnapshotListener { [weak self] snapshot, _ in
@@ -47,15 +54,15 @@ final class NotificationStore: ObservableObject {
                 }
             }
     }
-    
+
     func stopListening() {
         listener?.remove()
         listener = nil
-        notifications = []
+        allNotifications = []
         deliveredIDs = []
         Task { try? await UNUserNotificationCenter.current().setBadgeCount(0) }
     }
-    
+
     func markRead(_ item: AppNotification) async {
         guard !item.isRead else { return }
         do {
@@ -68,11 +75,11 @@ final class NotificationStore: ObservableObject {
             #endif
         }
     }
-    
+
     func markAllRead() async {
         let unread = notifications.filter { !$0.isRead }
         guard !unread.isEmpty else { return }
-        
+
         let batch = database.batch()
         for item in unread {
             batch.updateData(
@@ -88,12 +95,12 @@ final class NotificationStore: ObservableObject {
             #endif
         }
     }
-    
+
     private func handle(_ snapshot: QuerySnapshot) {
-        notifications = snapshot.documents
+        allNotifications = snapshot.documents
             .compactMap { try? $0.data(as: AppNotification.self) }
             .sorted { ($0.createdAt ?? .now) > ($1.createdAt ?? .now) }
-        
+
         // Only notifications created after this session started raise an alert.
         // Older unread ones were missed while the app was closed, so they wait
         // in the inbox instead of firing a stale banner.
@@ -102,20 +109,21 @@ final class NotificationStore: ObservableObject {
                   !item.isRead,
                   let created = item.createdAt,
                   created >= liveSince,
+                  !blockedIDs.contains(item.actorID),
                   deliveredIDs.insert(item.id).inserted else { continue }
             deliver(item)
         }
-        
+
         let count = unreadCount
         Task { try? await UNUserNotificationCenter.current().setBadgeCount(count) }
     }
-    
+
     private func deliver(_ item: AppNotification) {
         let content = UNMutableNotificationContent()
         content.title = item.title
         content.body = item.body
         content.sound = .default
-        
+
         let request = UNNotificationRequest(
             identifier: item.id,
             content: content,
@@ -137,3 +145,4 @@ final class NotificationStore: ObservableObject {
         }
     }
 }
+

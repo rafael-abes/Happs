@@ -20,7 +20,9 @@ enum NotificationKind: String, Codable {
     case happLeft
     case happUpdated
     case happCancelled
-    
+    case recapPosted
+    case recapMissed
+
     var symbolName: String {
         switch self {
         case .friendRequest: "person.badge.plus"
@@ -31,9 +33,10 @@ enum NotificationKind: String, Codable {
         case .happLeft: "person.crop.circle.badge.xmark"
         case .happUpdated: "pencil.circle.fill"
         case .happCancelled: "xmark.circle.fill"
+        case .recapPosted, .recapMissed: "photo.on.rectangle.angled"
         }
     }
-    
+
     var isNegative: Bool {
         switch self {
         case .groupDeclined,
@@ -52,7 +55,7 @@ enum NotificationKind: String, Codable {
 
 struct AppNotification: Codable, Identifiable {
     static let collectionName = "notifications"
-    
+
     @DocumentID private var documentID: String?
     let recipientID: String
     let actorID: String
@@ -61,6 +64,6 @@ struct AppNotification: Codable, Identifiable {
     let body: String
     var isRead: Bool
     @ServerTimestamp var createdAt: Date?
-    
+
     var id: String { documentID ?? "" }
 }

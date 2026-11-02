@@ -58,13 +58,17 @@ struct RecapTimelineView: View {
     @State private var now = Date()
     @State private var showsAdd = false
     @State private var pendingDelete: Recap?
+    @EnvironmentObject private var safetyStore: SafetyStore
+    @EnvironmentObject private var friendStore: FriendStore
+    @State private var reportTarget: ReportTarget?
+    @State private var pendingBlock: Recap?
 
     private var userID: String { authService.user?.uid ?? "" }
     private var isAttendee: Bool { happ.containsParticipant(userID) }
     private var endsAt: Date { happ.effectiveEndTime }
     private var windowOpen: Bool { RecapRules.isWindowOpen(endsAt: endsAt, now: now) }
-    private var recaps: [Recap] { recapStore.recapsByHapp[happ.id] ?? [] }
-    private var previews: [RecapPreview] { recapStore.previewsByHapp[happ.id] ?? [] }
+    private var recaps: [Recap] { recapStore.visibleRecaps(happ.id) }
+    private var previews: [RecapPreview] { recapStore.visiblePreviews(happ.id) }
     private var myCount: Int { recaps.filter { $0.authorID == userID }.count }
     private var slotsLeft: Int { max(0, RecapRules.maxPhotosPerPerson - myCount) }
 
@@ -101,6 +105,30 @@ struct RecapTimelineView: View {
                 Task { await recapStore.delete(recap) }
             }
             Button("Keep", role: .cancel) { }
+        }
+        .sheet(item: Binding(
+            get: { reportTarget.map(IdentifiedReport.init) },
+            set: { if $0 == nil { reportTarget = nil } }
+        )) { item in
+            ReportSheet(target: item.target)
+        }
+        .confirmationDialog(
+            "Block this person?",
+            isPresented: Binding(get: { pendingBlock != nil }, set: { if !$0 { pendingBlock = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingBlock
+        ) { recap in
+            Button("Block \(recap.authorName)", role: .destructive) {
+                Task {
+                    await safetyStore.block(
+                        userID: recap.authorID, name: recap.authorName,
+                        currentUserID: userID, friendStore: friendStore
+                    )
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { recap in
+            Text("You'll stop seeing \(recap.authorName)'s photos and Happs, and you'll no longer be friends.")
         }
         .alert("Something Went Wrong", isPresented: Binding(
             get: { recapStore.errorMessage != nil },
@@ -210,21 +238,49 @@ struct RecapTimelineView: View {
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Delete photo by \(recap.authorName)")
                     .accessibilityHint("Asks you to confirm before it is removed.")
+                } else {
+                    Menu {
+                        Button("Report photo", systemImage: "flag") {
+                            reportTarget = ReportTarget(
+                                kind: .photo,
+                                targetID: ReportTarget.safeID(recap.storagePath),
+                                happID: happ.id,
+                                offenderID: recap.authorID,
+                                offenderName: recap.authorName,
+                                summary: recap.caption.isEmpty ? "Photo in \(happ.title)" : recap.caption,
+                                hideID: RecapStore.hideID(for: recap)
+                            )
+                        }
+                        Button("Block \(recap.authorName)", systemImage: "hand.raised", role: .destructive) {
+                            pendingBlock = recap
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("More options for photo by \(recap.authorName)")
+                    .accessibilityHint("Report the photo or block this person.")
                 }
             }
             RecapImageView(
                 path: recap.storagePath,
                 accessibilityDescription: AccessibilityText.photoPosition(index: index + 1, total: total)
                     + " "
-                    + AccessibilityText.recapPhoto(author: recap.authorName, caption: recap.caption)
+                    + AccessibilityText.recapPhoto(author: recap.authorName, caption: ContentFilter.displayText(recap.caption))
             )
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             if !recap.caption.isEmpty {
-                Text(recap.caption).font(.subheadline)
+                Text(ContentFilter.displayText(recap.caption)).font(.subheadline)
             }
         }
         .padding(12)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
     }
+}
+
+/// Lets a ReportTarget drive `.sheet(item:)`.
+private struct IdentifiedReport: Identifiable {
+    let target: ReportTarget
+    var id: String { target.kind.rawValue + target.targetID }
 }
 
