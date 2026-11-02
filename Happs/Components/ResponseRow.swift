@@ -11,7 +11,7 @@ struct ResponseRow: View {
     let subtitle: String?
     let onAccept: () -> Void
     let onDecline: () -> Void
-    
+
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) {
@@ -25,7 +25,7 @@ struct ResponseRow: View {
             }
         }
     }
-    
+
     private var labels: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.headline)
@@ -35,15 +35,25 @@ struct ResponseRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .accessibilityElement(children: .combine)
     }
-    
+
     private var buttons: some View {
         HStack(spacing: 8) {
-            Button { onAccept() } label: { Text("Accept").lineLimit(1) }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-            Button { onDecline() } label: { Text("Decline").lineLimit(1) }
-                .buttonStyle(.bordered)
+            Button { onAccept() } label: {
+                Text("Accept").lineLimit(1).frame(minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.happsGreenFill)
+            .accessibilityLabel("Accept \(title)")
+            .accessibilityHint("Accepts this request or invitation.")
+
+            Button { onDecline() } label: {
+                Text("Decline").lineLimit(1).frame(minHeight: 44).foregroundStyle(.primary)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Decline \(title)")
+            .accessibilityHint("Declines this request or invitation.")
         }
         .controlSize(.small)
     }

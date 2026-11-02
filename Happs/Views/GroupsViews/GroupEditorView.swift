@@ -32,6 +32,7 @@ struct GroupEditorView: View {
             Form {
                 Section("Group name") {
                     TextField("e.g. Badminton crew", text: $name)
+                        .accessibilityLabel("Group name")
                 }
                 
                 Section {
@@ -54,9 +55,13 @@ struct GroupEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .accessibilityHint("Closes without saving.")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(group == nil ? "Send Invites" : "Save") { save() }.disabled(isSaving)
+                    Button(group == nil ? "Send Invites" : "Save") { save() }
+                        .disabled(isSaving)
+                        .accessibilityValue(isSaving ? "Saving" : "")
+                        .accessibilityHint(group == nil ? "Creates the group and invites the selected friends." : "Saves your changes.")
                 }
             }
             .interactiveDismissDisabled(isSaving)
@@ -79,20 +84,31 @@ struct GroupEditorView: View {
     }
     
     private func friendRow(_ friend: UserProfile) -> some View {
-        Button { toggle(friend.id) } label: {
+        let isSelected = selectedIDs.contains(friend.id)
+        let state = stateLabel(for: friend)
+        return Button { toggle(friend.id) } label: {
             HStack {
                 AvatarView(symbol: friend.avatarSymbol, size: 32)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(friend.displayName).foregroundStyle(.primary)
-                    if let label = stateLabel(for: friend) {
-                        Text(label).font(.caption).foregroundStyle(.secondary)
+                    if let state {
+                        Text(state).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
-                Image(systemName: selectedIDs.contains(friend.id) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selectedIDs.contains(friend.id) ? Color.green : Color.secondary)
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
             }
+            .frame(minHeight: 44)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            [friend.displayName, state?.lowercased(), isSelected ? "selected" : "not selected"]
+                .compactMap { $0 }
+                .joined(separator: ", ")
+        )
+        .accessibilityHint("Double tap to select or deselect.")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
     
     private func toggle(_ id: String) {

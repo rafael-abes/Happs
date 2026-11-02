@@ -14,10 +14,10 @@ final class EventSuggestionsModel: ObservableObject {
     @Published private(set) var events: [TicketmasterEvent] = []
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
-    
+
     private let service = TicketmasterService()
     private var loadTask: Task<Void, Never>?
-    
+
     func reload(after delay: Duration = .zero) {
         loadTask?.cancel()
         loadTask = Task {
@@ -52,11 +52,11 @@ final class EventSuggestionsModel: ObservableObject {
 
 struct EventSuggestionsView: View {
     let onSelect: (HappDraft) -> Void
-    
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @StateObject private var model = EventSuggestionsModel()
-    
+
     var body: some View {
         content
             .navigationTitle("Events near campus")
@@ -70,11 +70,12 @@ struct EventSuggestionsView: View {
             }
             .task { model.reload() }
     }
-    
+
     @ViewBuilder
     private var content: some View {
         if model.isLoading && model.events.isEmpty {
             ProgressView("Finding events…")
+                .accessibilityLabel("Finding events")
         } else if let message = model.errorMessage {
             ContentUnavailableView {
                 Label("Couldn't load events", systemImage: "exclamationmark.triangle")
@@ -82,6 +83,7 @@ struct EventSuggestionsView: View {
                 Text(message)
             } actions: {
                 Button("Try Again") { model.reload() }
+                    .accessibilityHint("Searches for events again.")
             }
         } else if model.events.isEmpty {
             ContentUnavailableView(
@@ -93,7 +95,7 @@ struct EventSuggestionsView: View {
             eventList
         }
     }
-    
+
     private var eventList: some View {
         List {
             Section {
@@ -105,20 +107,31 @@ struct EventSuggestionsView: View {
             }
         }
     }
-    
+
     private func eventRow(_ event: TicketmasterEvent) -> some View {
         Button { select(event) } label: {
             EventRow(event: event)
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            [event.name, event.venueName, event.dateText].compactMap { $0 }.joined(separator: ", ")
+        )
+        .accessibilityHint("Double tap to use this event for your Happ.")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityActions {
+            if let url = event.url {
+                Button("Open tickets for \(event.name)") { openURL(url) }
+            }
+        }
         .swipeActions(edge: .trailing) {
             if let url = event.url {
                 Button("Tickets", systemImage: "ticket") { openURL(url) }
-                    .tint(.green)
+                    .tint(Color.happsGreenFill)
             }
         }
     }
-    
+
     private var categoryMenu: some View {
         Menu {
             Picker("Category", selection: $model.category) {
@@ -129,8 +142,11 @@ struct EventSuggestionsView: View {
         } label: {
             Label(model.category.rawValue, systemImage: "line.3.horizontal.decrease.circle")
         }
+        .accessibilityLabel("Category")
+        .accessibilityValue(model.category.rawValue)
+        .accessibilityHint("Choose which kind of event to show.")
     }
-    
+
     private func select(_ event: TicketmasterEvent) {
         onSelect(event.asDraft())
         dismiss()
@@ -139,7 +155,7 @@ struct EventSuggestionsView: View {
 
 private struct EventRow: View {
     let event: TicketmasterEvent
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             thumbnail
@@ -154,11 +170,12 @@ private struct EventRow: View {
                 }
                 Text(event.dateText)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
         }
+        .frame(minHeight: 44, alignment: .leading)
     }
-    
+
     private var thumbnail: some View {
         AsyncImage(url: event.imageURL) { phase in
             switch phase {
@@ -171,5 +188,6 @@ private struct EventRow: View {
         }
         .frame(width: 72, height: 72)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityHidden(true)
     }
 }

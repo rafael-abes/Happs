@@ -7,17 +7,17 @@
 import SwiftUI
 import CoreLocation
 import FirebaseAuth
- 
+
 struct HappEditorView: View {
     private let editing: Happ?
- 
+
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
     @EnvironmentObject private var groupStore: GroupStore
     @EnvironmentObject private var friendStore: FriendStore
     @EnvironmentObject private var aiService: AIService
     @Environment(\.dismiss) private var dismiss
- 
+
     @State private var title: String
     @State private var details: String
     @State private var location: String
@@ -32,7 +32,7 @@ struct HappEditorView: View {
     @State private var isPresentingLocationPicker = false
     @State private var errorMessage: String?
     @State private var showAssistant = false
- 
+
     init(happ: Happ? = nil) {
         editing = happ
         let seed = happ.map { HappDraft(happ: $0) } ?? HappDraft.blank
@@ -46,27 +46,30 @@ struct HappEditorView: View {
         _hasEndTime = State(initialValue: seed.endTime != nil)
         _endTime = State(initialValue: seed.endTime ?? seed.startTime.addingTimeInterval(60 * 60))
     }
- 
+
     var body: some View {
         Form {
             if aiService.isEnabled {
                 Section {
                     Button { showAssistant = true } label: {
                         Label("Describe it", systemImage: "sparkles")
+                            .frame(minHeight: 44)
                     }
+                    .accessibilityHint("Opens an assistant that fills in this form from what you say or type.")
                 }
             }
             if editing == nil {
                 eventSection
             }
- 
+
             Section("Happ Title") {
                 HStack {
                     TextField("What's happening?", text: $title)
-                    MicButton(text: $title, id: "editor-title")
+                        .accessibilityLabel("Happ title")
+                    MicButton(text: $title, id: "editor-title", fieldName: "title")
                 }
             }
- 
+
             Section("Location") {
                 Button {
                     isPresentingLocationPicker = true
@@ -76,13 +79,20 @@ struct HappEditorView: View {
                             .foregroundStyle(location.isEmpty ? .secondary : .primary)
                         Spacer()
                         Image(systemName: isOffCampus ? "location.slash" : "mappin.and.ellipse")
+                            .accessibilityHidden(true)
                     }
+                    .frame(minHeight: 44)
                 }
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Location")
+                .accessibilityValue(location.isEmpty ? "Not set" : (isOffCampus ? "\(location), off campus" : location))
+                .accessibilityHint("Opens a map to choose where it is happening.")
+                .accessibilityAddTraits(.isButton)
             }
- 
+
             whenSection
- 
+
             Section("Category") {
                 Picker("Category", selection: $category) {
                     ForEach(HappCategory.allCases) { category in
@@ -91,16 +101,17 @@ struct HappEditorView: View {
                 }
                 .pickerStyle(.segmented)
             }
- 
+
             if editing == nil {
                 inviteSection
             }
- 
+
             Section("Details") {
                 HStack(alignment: .top) {
                     TextField("Add notes or anything else", text: $details, axis: .vertical)
                         .lineLimit(3...6)
-                    MicButton(text: $details, id: "editor-details")
+                        .accessibilityLabel("Details")
+                    MicButton(text: $details, id: "editor-details", fieldName: "details")
                 }
             }
         }
@@ -109,9 +120,13 @@ struct HappEditorView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
+                    .accessibilityHint("Closes without saving.")
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button(editing == nil ? "Add Happ" : "Save") { save() }.disabled(isSaving)
+                Button(editing == nil ? "Add Happ" : "Save") { save() }
+                    .disabled(isSaving)
+                    .accessibilityValue(isSaving ? "Saving" : "")
+                    .accessibilityHint(editing == nil ? "Creates this Happ." : "Saves your changes.")
             }
         }
         .onChange(of: startTime) { _, newStart in
@@ -142,19 +157,21 @@ struct HappEditorView: View {
             Text(errorMessage ?? "Please try again.")
         }
     }
- 
+
     private var eventSection: some View {
         Section {
             NavigationLink {
                 EventSuggestionsView(onSelect: apply)
             } label: {
                 Label("Start from a Ticketmaster event", systemImage: "ticket.fill")
+                    .frame(minHeight: 44)
             }
+            .accessibilityHint("Browse upcoming events and turn one into a Happ.")
         } footer: {
             Text("Browse upcoming events near campus and turn one into a Happ.")
         }
     }
- 
+
     private var whenSection: some View {
         Section {
             DatePicker("Starts", selection: $startTime)
@@ -170,7 +187,7 @@ struct HappEditorView: View {
             }
         }
     }
- 
+
     private var inviteSection: some View {
         Section {
             if groupStore.groups.isEmpty {
@@ -186,13 +203,15 @@ struct HappEditorView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .accessibilityLabel("Invite \(group.name), \(group.memberIDs.count) \(group.memberIDs.count == 1 ? "member" : "members")")
+                    .accessibilityHint("Invites everyone in this group when you add the Happ.")
                 }
             }
         } header: {
             Text("Invite a group")
         }
     }
- 
+
     private func inviteBinding(for group: FriendGroup) -> Binding<Bool> {
         Binding(
             get: { invitedGroupIDs.contains(group.id) },
@@ -205,7 +224,7 @@ struct HappEditorView: View {
             }
         )
     }
- 
+
     private var invitedFriendIDs: [String] {
         let members = groupStore.groups
             .filter { invitedGroupIDs.contains($0.id) }
@@ -213,11 +232,11 @@ struct HappEditorView: View {
             .filter { $0 != authService.user?.uid }
         return Array(Set(members))
     }
- 
+
     private var errorIsPresented: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
- 
+
     private func apply(_ seed: HappDraft) {
         title = seed.title
         details = seed.details
@@ -229,15 +248,15 @@ struct HappEditorView: View {
         hasEndTime = seed.endTime != nil
         endTime = seed.endTime ?? seed.startTime.addingTimeInterval(60 * 60)
     }
- 
+
     private func save() {
         guard let user = authService.user else {
             errorMessage = "Sign in again before saving."
             return
         }
- 
+
         let finalEnd: Date? = hasEndTime ? endTime : nil
- 
+
         isSaving = true
         Task {
             defer { isSaving = false }

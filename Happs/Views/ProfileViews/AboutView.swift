@@ -6,17 +6,17 @@
 //
 
 import SwiftUI
- 
+
 private struct Credit: Identifiable {
     let id = UUID()
     let name: String
     let detail: String
     let url: URL?
 }
- 
+
 struct AboutView: View {
     @State private var showsTour = false
- 
+
     private let credits: [Credit] = [
         Credit(
             name: "Firebase iOS SDK",
@@ -64,36 +64,38 @@ struct AboutView: View {
             url: URL(string: "https://github.com/supabase/supabase-swift")
         ),
     ]
- 
+
     private var versionText: String {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = info?["CFBundleVersion"] as? String ?? "1"
         return "\(version) (\(build))"
     }
- 
+
     var body: some View {
         List {
             header
- 
+
             Section("About Happs") {
                 Text("Happs helps Monash students turn free time into plans. See which friends are on campus right now, post a spontaneous event called a Happ, and let people nearby join in one tap.")
                 Text("The purpose is to make it easier to say yes to last-minute study sessions, meals and sport, while keeping you in control. Your location is only shared while you are on campus, only with your friends, and Invisible Mode hides you at any time.")
             }
- 
+
             Section {
                 Button {
                     showsTour = true
                 } label: {
                     Label("Replay the welcome tour", systemImage: "questionmark.circle")
+                        .frame(minHeight: 44)
                 }
+                .accessibilityHint("Shows the welcome pages again.")
             }
- 
+
             Section("Developer") {
                 LabeledContent("Name", value: "Rafael Enrique Abes")
                 LabeledContent("Student ID", value: "34122095")
             }
- 
+
             Section {
                 ForEach(credits) { credit in
                     creditRow(credit)
@@ -110,16 +112,17 @@ struct AboutView: View {
             OnboardingView { showsTour = false }
         }
     }
- 
+
     private var header: some View {
         Section {
             VStack(spacing: 6) {
                 Image(systemName: "figure.2.arms.open")
                     .font(.system(size: 48))
-                    .foregroundStyle(Color.happsGreen)
+                    .foregroundStyle(Color.happsGreenText)
                     .accessibilityHidden(true)
                 Text("Happs")
                     .font(.largeTitle.bold())
+                    .accessibilityAddTraits(.isHeader)
                 Text("Version \(versionText)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -128,18 +131,24 @@ struct AboutView: View {
             .listRowBackground(Color.clear)
         }
     }
- 
+
     @ViewBuilder
     private func creditRow(_ credit: Credit) -> some View {
         if let url = credit.url {
             Link(destination: url) {
                 creditText(credit)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(credit.name), \(credit.detail)")
+            .accessibilityHint("Opens \(credit.name) in your browser.")
+            .accessibilityAddTraits(.isLink)
         } else {
             creditText(credit)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(credit.name), \(credit.detail)")
         }
     }
- 
+
     private func creditText(_ credit: Credit) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(credit.name)
@@ -150,5 +159,7 @@ struct AboutView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+        .frame(minHeight: 44, alignment: .leading)
     }
 }
+

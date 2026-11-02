@@ -16,4 +16,15 @@ extension UserStatus {
         case .doNotDisturb: .gray
         }
     }
+
+    /// Shape cue so status is never conveyed by colour alone.
+    var symbolName: String {
+        switch self {
+        case .available: "checkmark"
+        case .inClass: "book.fill"
+        case .busy: "clock.fill"
+        case .doNotDisturb: "moon.fill"
+        }
+    }
 }
+

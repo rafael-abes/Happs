@@ -51,11 +51,21 @@ struct CampusLockedView: View {
         case .outside, .inside: "Head to campus to see where everyone is and join in."
         }
     }
+
+    private var friendsLine: String {
+        onlineFriends.count == 1
+            ? "1 friend is on campus now"
+            : "\(onlineFriends.count) friends are on campus now"
+    }
     
     var body: some View {
         ZStack {
             blurredCampus
-            card
+            ScrollView {
+                card
+                    .frame(maxWidth: .infinity)
+            }
+            .scrollBounceBehavior(.basedOnSize)
         }
         .expiryClock($now, boundaries: happs.clockBoundaries)
     }
@@ -70,20 +80,24 @@ struct CampusLockedView: View {
         .blur(radius: 9)
         .allowsHitTesting(false)
         .clipped()
+        .accessibilityHidden(true)
     }
     
     private var card: some View {
         VStack(spacing: 12) {
             if access == .locating {
                 ProgressView()
+                    .accessibilityHidden(true)
             } else {
                 Image(systemName: "lock.fill")
                     .font(.largeTitle)
-                    .foregroundStyle(Color.happsGreen)
+                    .foregroundStyle(Color.happsGreenText)
+                    .accessibilityHidden(true)
             }
             Text(headline)
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
             Text(detail)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -93,6 +107,7 @@ struct CampusLockedView: View {
         .padding(24)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .padding(32)
+        .accessibilityElement(children: .combine)
     }
     
     @ViewBuilder
@@ -101,12 +116,11 @@ struct CampusLockedView: View {
             VStack(spacing: 6) {
                 HStack(spacing: -8) {
                     ForEach(onlineFriends.prefix(5)) { friend in
-                        AvatarView(symbol: friend.avatarSymbol, size: 30, ringColor: Color(.systemBackground))
+                        AvatarView(symbol: friend.avatarSymbol, photo: friend.avatarPhoto, size: 30, ringColor: Color(.systemBackground))
                     }
                 }
-                Text(onlineFriends.count == 1
-                     ? "1 friend is on campus now"
-                     : "\(onlineFriends.count) friends are on campus now")
+                .accessibilityHidden(true)
+                Text(friendsLine)
                     .font(.subheadline.weight(.semibold))
             }
             .padding(.top, 4)

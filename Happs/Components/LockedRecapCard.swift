@@ -42,7 +42,7 @@ struct LockedRecapCard: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Locked recap for \(happ.title). \(countText)")
     }
  

@@ -17,17 +17,17 @@ struct HappsMapView: View {
         case happs = "Happs"
         var id: String { rawValue }
     }
-    
+
     private enum MapSelection: Hashable {
         case happ(String)
         case friend(String)
     }
-    
+
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var happStore: HappStore
     @EnvironmentObject private var friendStore: FriendStore
     @EnvironmentObject private var locationService: LocationService
-    
+
     @State private var mode = LayerMode.all
     @State private var cameraPosition: MapCameraPosition = .region(LocationService.campusRegion)
     @State private var selection: MapSelection?
@@ -36,33 +36,33 @@ struct HappsMapView: View {
     @State private var isWorking = false
     @State private var now = Date()
     @State private var errorMessage: String?
-    
+
     private var showsHapps: Bool { mode != .friends }
     private var showsFriends: Bool { mode != .happs }
-    
+
     private var liveHapps: [Happ] {
         happStore.happs.filter { !$0.hasEnded(at: now) }
     }
-    
+
     private var mappableHapps: [Happ] {
         liveHapps.filter { $0.showsOnMap }
     }
-    
+
     private var offMapCount: Int {
         liveHapps.count - mappableHapps.count
     }
-    
+
     private var selectedHapp: Happ? {
         guard showsHapps, case .happ(let id)? = selection else { return nil }
         return mappableHapps.first { $0.id == id }
     }
-    
+
     private var selectedFriend: UserProfile? {
         guard showsFriends, case .friend(let id)? = selection,
               friendStore.location(for: id) != nil else { return nil }
         return friendStore.friends.first { $0.id == id }
     }
-    
+
     private var mapStyle: MapStyle {
         switch mode {
         case .all:
@@ -71,19 +71,21 @@ struct HappsMapView: View {
             return .standard(emphasis: .muted, pointsOfInterest: .excludingAll)
         }
     }
-    
+
     var body: some View {
         Map(position: $cameraPosition) {
             UserAnnotation()
-            
+
             MapPolygon(coordinates: LocationService.campusBoundary)
                 .foregroundStyle(.green.opacity(0.12))
                 .stroke(.green, lineWidth: 2)
-            
+
             if showsHapps { happAnnotations }
             if showsFriends { friendAnnotations }
         }
         .mapStyle(mapStyle)
+        .accessibilityLabel("Campus map showing \(showsHapps ? "\(mappableHapps.count) happs" : "")\(showsHapps && showsFriends ? " and " : "")\(showsFriends ? "\(friendStore.onlineFriends.count) friends on campus" : "")")
+        .accessibilityHint("The same Happs are in the list. Use Show list in the toolbar.")
         .mapControls {
             MapUserLocationButton()
             MapCompass()
@@ -117,7 +119,7 @@ struct HappsMapView: View {
             Text(errorMessage ?? "Please try again.")
         }
     }
-    
+
     @MapContentBuilder
     private var happAnnotations: some MapContent {
         ForEach(mappableHapps) { happ in
@@ -125,12 +127,14 @@ struct HappsMapView: View {
                 Annotation(happ.title, coordinate: coordinate, anchor: .bottom) {
                     HappPin(happ: happ, isSelected: selection == .happ(happ.id))
                         .onTapGesture { selection = .happ(happ.id) }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Double tap to show details.")
                 }
                 .annotationTitles(.hidden)
             }
         }
     }
-    
+
     @MapContentBuilder
     private var friendAnnotations: some MapContent {
         ForEach(friendStore.friends) { friend in
@@ -141,12 +145,14 @@ struct HappsMapView: View {
                 ) {
                     FriendPin(friend: friend, isSelected: selection == .friend(friend.id))
                         .onTapGesture { selection = .friend(friend.id) }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Double tap to show details.")
                 }
                 .annotationTitles(.hidden)
             }
         }
     }
-    
+
     private var modePicker: some View {
         Picker("Map layers", selection: $mode) {
             ForEach(LayerMode.allCases) { layer in
@@ -154,12 +160,13 @@ struct HappsMapView: View {
             }
         }
         .pickerStyle(.segmented)
+        .accessibilityHint("Choose whether the map shows everything, friends or Happs.")
         .padding(8)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
         .padding(.top, 4)
     }
-    
+
     @ViewBuilder
     private var bottomOverlay: some View {
         if let happ = selectedHapp {
@@ -182,19 +189,19 @@ struct HappsMapView: View {
                 .font(.caption)
                 .multilineTextAlignment(.center)
                 .padding(8)
-                .background(.regularMaterial, in: Capsule())
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                 .padding(.bottom, 8)
         }
     }
-    
+
     private var leaveIsPresented: Binding<Bool> {
         Binding(get: { happPendingLeave != nil }, set: { if !$0 { happPendingLeave = nil } })
     }
-    
+
     private var errorIsPresented: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
-    
+
     private func centerCamera() {
         if let coordinate = locationService.currentCoordinate {
             cameraPosition = .region(
@@ -204,7 +211,7 @@ struct HappsMapView: View {
             cameraPosition = .region(LocationService.campusRegion)
         }
     }
-    
+
     private func toggleJoin(_ happ: Happ) {
         guard let userID = authService.user?.uid else { return }
         if happ.containsParticipant(userID) {
@@ -213,13 +220,16 @@ struct HappsMapView: View {
             updateParticipation(happ, isJoining: true, userID: userID)
         }
     }
-    
+
     private func updateParticipation(_ happ: Happ, isJoining: Bool, userID: String) {
         isWorking = true
         Task {
             defer { isWorking = false }
             do {
                 try await happStore.toggleParticipation(happID: happ.id, userID: userID, isJoining: isJoining)
+                AccessibilityNotification.Announcement(
+                    isJoining ? "You joined \(happ.title)." : "You left \(happ.title)."
+                ).post()
             } catch {
                 errorMessage = error.localizedDescription
             }

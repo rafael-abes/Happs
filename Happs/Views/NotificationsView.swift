@@ -6,13 +6,13 @@
 //
 
 import SwiftUI
- 
+
 struct NotificationsView: View {
     @EnvironmentObject private var notificationStore: NotificationStore
     @Environment(\.dismiss) private var dismiss
- 
+
     @State private var query = ""
- 
+
     private var filtered: [AppNotification] {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !text.isEmpty else { return notificationStore.notifications }
@@ -20,7 +20,7 @@ struct NotificationsView: View {
             $0.title.lowercased().contains(text) || $0.body.lowercased().contains(text)
         }
     }
- 
+
     var body: some View {
         NavigationStack {
             Group {
@@ -57,22 +57,24 @@ struct NotificationsView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
+                        .accessibilityHint("Closes the notifications.")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button("Mark all read") {
                         Task { await notificationStore.markAllRead() }
                     }
                     .disabled(notificationStore.unreadCount == 0)
+                    .accessibilityHint("Marks every notification as read.")
                 }
             }
         }
     }
- 
+
     /// Stable per-row key for the speaker. Works whether the model's id is optional or not.
     private func speakID(for item: AppNotification) -> String {
         "note-\(item.createdAt?.timeIntervalSince1970 ?? 0)-\(item.title)"
     }
- 
+
     /// The speaker is a sibling of the row button, not inside it, so the two taps never clash.
     private func row(_ item: AppNotification) -> some View {
         HStack(alignment: .top, spacing: 4) {
@@ -85,13 +87,14 @@ struct NotificationsView: View {
                         .foregroundStyle(.white)
                         .frame(width: 34, height: 34)
                         .background(
-                            item.kind.isNegative ? .red : Color.happsGreen,
+                            item.kind.isNegative ? Color.happsRedFill : Color.happsGreenFill,
                             in: Circle()
                         )
- 
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.title)
                             .font(.headline)
+                            .fontWeight(item.isRead ? .regular : .bold)
                             .foregroundStyle(.primary)
                         Text(item.body)
                             .font(.subheadline)
@@ -99,25 +102,37 @@ struct NotificationsView: View {
                         if let date = item.createdAt {
                             Text(date.formatted(.relative(presentation: .named)))
                                 .font(.caption)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                         }
                     }
- 
+
                     Spacer(minLength: 4)
                 }
             }
             .buttonStyle(.plain)
- 
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                AccessibilityText.notificationRow(
+                    isRead: item.isRead,
+                    title: item.title,
+                    body: item.body,
+                    date: item.createdAt
+                )
+            )
+            .accessibilityHint(item.isRead ? "" : "Double tap to mark as read.")
+            .accessibilityAddTraits(.isButton)
+
             // Unread dot and speaker share one line. The dot keeps its space when read,
             // so the speakers stay aligned down the list.
             HStack(spacing: 6) {
                 Circle()
-                    .fill(item.kind.isNegative ? .red : .green)
+                    .fill(item.kind.isNegative ? Color.happsRedFill : Color.happsGreenFill)
                     .frame(width: 10, height: 10)
                     .opacity(item.isRead ? 0 : 1)
-                SpeakButton(id: speakID(for: item), text: item.spokenSummary)
+                    .accessibilityHidden(true)
+                SpeakButton(id: speakID(for: item), text: item.spokenSummary, subject: item.title)
             }
-            .frame(height: 34)
+            .frame(minHeight: 44)
         }
     }
 }

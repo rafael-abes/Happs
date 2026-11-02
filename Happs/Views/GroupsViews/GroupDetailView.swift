@@ -65,6 +65,8 @@ struct GroupDetailView: View {
             if group.ownerID == currentUserID {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Edit") { isEditing = true }
+                        .accessibilityLabel("Edit group")
+                        .accessibilityHint("Change the name or who is invited.")
                 }
             }
         }
@@ -97,13 +99,17 @@ struct GroupDetailView: View {
     private func membersSection(_ group: FriendGroup) -> some View {
         Section("Members (\(group.memberIDs.count))") {
             ForEach(group.memberIDs, id: \.self) { id in
+                let isOwner = id == group.ownerID
                 HStack {
                     Text(displayName(for: id))
                     Spacer()
-                    if id == group.ownerID {
-                        Text("Owner").font(.caption).foregroundStyle(.green)
+                    if isOwner {
+                        Text("Owner").font(.caption).foregroundStyle(Color.happsGreenText)
                     }
                 }
+                .frame(minHeight: 44)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(isOwner ? "\(displayName(for: id)), owner" : displayName(for: id))
             }
         }
     }
@@ -116,6 +122,9 @@ struct GroupDetailView: View {
                     Spacer()
                     Text("Pending").font(.caption).foregroundStyle(.secondary)
                 }
+                .frame(minHeight: 44)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(displayName(for: id)), invitation pending")
             }
         }
     }
@@ -134,6 +143,7 @@ struct GroupDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .accessibilityElement(children: .combine)
                 }
             }
         }
@@ -143,8 +153,12 @@ struct GroupDetailView: View {
         Section {
             if group.ownerID == currentUserID {
                 Button("Delete Group", role: .destructive) { pendingAction = .delete }
+                    .frame(minHeight: 44)
+                    .accessibilityHint("Asks you to confirm. Deleting cannot be undone.")
             } else {
                 Button("Leave Group", role: .destructive) { pendingAction = .leave }
+                    .frame(minHeight: 44)
+                    .accessibilityHint("Asks you to confirm before you leave.")
             }
         }
     }

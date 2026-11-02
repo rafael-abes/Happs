@@ -5,14 +5,14 @@
 //  Created by Rafa Abes on 10/23/26.
 //
 import SwiftUI
- 
+
 private struct OnboardingPage: Identifiable {
     let id = UUID()
     let symbol: String
     let title: String
     let message: String
     let tips: [String]
- 
+
     static let all: [OnboardingPage] = [
         OnboardingPage(
             symbol: "figure.2.arms.open",
@@ -77,93 +77,104 @@ private struct OnboardingPage: Identifiable {
         )
     ]
 }
- 
+
 /// Remembers, per account, whether the welcome tour has been shown.
 enum OnboardingStore {
     private static func key(_ userID: String) -> String { "hasSeenOnboarding.\(userID)" }
- 
+
     static func hasSeen(_ userID: String, defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: key(userID))
     }
- 
+
     static func markSeen(_ userID: String, defaults: UserDefaults = .standard) {
         defaults.set(true, forKey: key(userID))
     }
 }
- 
+
 struct OnboardingView: View {
     let onFinish: () -> Void
- 
+
     @State private var page = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric private var iconSize = 84.0
     private let pages = OnboardingPage.all
- 
+
     private var isLast: Bool { page == pages.count - 1 }
- 
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Spacer()
                 Button("Skip", action: onFinish)
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel("Skip the tour")
+                    .accessibilityHint("Goes straight to the app.")
                     .frame(minWidth: 44, minHeight: 44)
                     .opacity(isLast ? 0 : 1)
                     .disabled(isLast)
             }
             .padding(.horizontal)
- 
+
             TabView(selection: $page) {
                 ForEach(Array(pages.enumerated()), id: \.element.id) { index, item in
                     pageView(item).tag(index)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
- 
+ .tabViewStyle(.page(indexDisplayMode: .never))
+            .onChange(of: page) { _, newPage in
+                AccessibilityNotification.Announcement(
+                    "Page \(newPage + 1) of \(pages.count), \(pages[newPage].title)"
+                ).post()
+            }
+
             pageDots
                 .padding(.vertical, 12)
- 
+
             Button {
                 if isLast {
                     onFinish()
                 } else {
-                    withAnimation { page += 1 }
+                    if reduceMotion { page += 1 } else { withAnimation { page += 1 } }
                 }
             } label: {
                 Text(isLast ? "Get started" : "Next")
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(Color.happsGreen, in: Capsule())
+                    .background(Color.happsGreenFill, in: Capsule())
                     .foregroundStyle(.white)
             }
             .padding(.horizontal, 32)
+            .accessibilityHint(isLast ? "Finishes the tour and opens the app." : "Goes to the next page.")
             .padding(.bottom, 24)
         }
         .background(Color(.systemBackground))
     }
- 
+
     private func pageView(_ item: OnboardingPage) -> some View {
         ScrollView {
             VStack(spacing: 18) {
                 Image(systemName: item.symbol)
                     .font(.system(size: iconSize))
-                    .foregroundStyle(Color.happsGreen)
+                    .foregroundStyle(Color.happsGreenText)
                     .padding(.top, 24)
                     .accessibilityHidden(true)
- 
+
                 Text(item.title)
                     .font(.title.bold())
                     .multilineTextAlignment(.center)
- 
+                    .accessibilityAddTraits(.isHeader)
+
                 Text(item.message)
                     .font(.body)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
- 
+
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(item.tips, id: \.self) { tip in
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(Color.happsGreen)
+                                .foregroundStyle(Color.happsGreenText)
+                                .accessibilityHidden(true)
                             Text(tip)
                                 .font(.subheadline)
                         }
@@ -177,25 +188,33 @@ struct OnboardingView: View {
             .padding(.bottom, 16)
         }
     }
- 
+
     private var pageDots: some View {
         HStack(spacing: 8) {
             ForEach(pages.indices, id: \.self) { index in
                 Circle()
-                    .fill(index == page ? Color.happsGreen : Color(.tertiaryLabel))
+                    .fill(index == page ? Color.happsGreenText : Color.secondary)
                     .frame(width: 8, height: 8)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Page \(page + 1) of \(pages.count)")
+        .accessibilityHint("Swipe up or down to change page.")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: if page < pages.count - 1 { page += 1 }
+            case .decrement: if page > 0 { page -= 1 }
+            @unknown default: break
+            }
+        }
     }
 }
- 
+
 /// Shows the tour once per account, the first time that account reaches the main app.
 private struct OnboardingGate: ViewModifier {
     let userID: String?
     @State private var isShowing = false
- 
+
     func body(content: Content) -> some View {
         content
             .fullScreenCover(isPresented: $isShowing) {
@@ -212,7 +231,7 @@ private struct OnboardingGate: ViewModifier {
             }
     }
 }
- 
+
 extension View {
     func onboarding(for userID: String?) -> some View {
         modifier(OnboardingGate(userID: userID))

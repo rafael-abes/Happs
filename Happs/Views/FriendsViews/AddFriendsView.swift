@@ -11,6 +11,7 @@ struct AddFriendsView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var friendStore: FriendStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
     
     @State private var searchText = ""
     @State private var results: [UserSearchEntry] = []
@@ -37,6 +38,7 @@ struct AddFriendsView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
+                        .accessibilityHint("Closes the search.")
                 }
             }
             .alert("Couldn't Send Request", isPresented: errorIsPresented) {
@@ -50,16 +52,23 @@ struct AddFriendsView: View {
     @ViewBuilder
     private func searchRow(for entry: UserSearchEntry) -> some View {
         let isSent = sentRequestIDs.contains(entry.id)
-        HStack {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.title2).foregroundStyle(.secondary)
-            Text(entry.displayName)
-            Spacer()
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout())
+        layout {
+            HStack {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.title2).foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(entry.displayName)
+            }
+            if !typeSize.isAccessibilitySize { Spacer() }
             Button(isSent ? "Sent" : "Request") {
                 sendRequest(to: entry)
             }
             .buttonStyle(.bordered)
+            .frame(minHeight: 44)
             .disabled(isSent)
+            .accessibilityLabel(isSent ? "Request sent to \(entry.displayName)" : "Send friend request to \(entry.displayName)")
+            .accessibilityHint(isSent ? "" : "Sends a friend request.")
         }
     }
     
@@ -81,6 +90,7 @@ struct AddFriendsView: View {
             do {
                 try await friendStore.sendFriendRequest(from: user.uid, fromDisplayName: user.displayName ?? "Someone", to: entry.id)
                 sentRequestIDs.insert(entry.id)
+                AccessibilityNotification.Announcement("Request sent to \(entry.displayName).").post()
             } catch { errorMessage = error.localizedDescription }
         }
     }

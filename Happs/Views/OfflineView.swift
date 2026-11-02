@@ -6,71 +6,80 @@
 //
 
 import SwiftUI
- 
+
 /// Full-screen page shown while the device has no internet connection.
 struct OfflineView: View {
     @ObservedObject var monitor: NetworkMonitor
- 
+
     @ScaledMetric private var iconSize = 72.0
- 
+
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image(systemName: "wifi.slash")
-                .font(.system(size: iconSize))
-                .foregroundStyle(Color.happsGreen)
-                .accessibilityHidden(true)
- 
-            Text("You're offline")
-                .font(.title.bold())
- 
-            Text("Happs needs the internet to show live friends and Happs. Check your Wi-Fi or mobile data and we'll reconnect automatically.")
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 32)
- 
-            Button {
-                Task { await monitor.retry() }
-            } label: {
-                HStack(spacing: 8) {
-                    if monitor.isChecking {
-                        ProgressView().tint(.white)
+        ScrollView {
+            VStack(spacing: 20) {
+                Image(systemName: "wifi.slash")
+                    .font(.system(size: iconSize))
+                    .foregroundStyle(Color.happsGreenText)
+                    .padding(.top, 60)
+                    .accessibilityHidden(true)
+
+                Text("You're offline")
+                    .font(.title.bold())
+                    .accessibilityAddTraits(.isHeader)
+
+                Text("Happs needs the internet to show live friends and Happs. Check your Wi-Fi or mobile data and we'll reconnect automatically.")
+                    .font(.body)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 32)
+
+                Button {
+                    Task { await monitor.retry() }
+                } label: {
+                    HStack(spacing: 8) {
+                        if monitor.isChecking {
+                            ProgressView().tint(.white)
+                        }
+                        Text(monitor.isChecking ? "Checking..." : "Try again")
+                            .font(.headline)
                     }
-                    Text(monitor.isChecking ? "Checking..." : "Try again")
-                        .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(Color.happsGreenFill, in: Capsule())
+                    .foregroundStyle(.white)
                 }
-                .frame(maxWidth: .infinity, minHeight: 50)
-                .background(Color.happsGreen, in: Capsule())
-                .foregroundStyle(.white)
+                .disabled(monitor.isChecking)
+                .padding(.horizontal, 40)
+                .padding(.top, 8)
+                .accessibilityLabel("Try again")
+                .accessibilityValue(monitor.isChecking ? "Checking" : "")
+                .accessibilityHint("Checks your connection again.")
             }
-            .disabled(monitor.isChecking)
-            .padding(.horizontal, 40)
-            .padding(.top, 8)
-            Spacer()
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
         .accessibilityElement(children: .contain)
     }
 }
- 
+
 private struct OfflineOverlay: ViewModifier {
     @ObservedObject var monitor: NetworkMonitor
- 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func body(content: Content) -> some View {
         ZStack {
             content
             if monitor.showOffline {
                 OfflineView(monitor: monitor)
-                    .transition(.opacity)
+                    .transition(reduceMotion ? .identity : .opacity)
                     .zIndex(1)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: monitor.showOffline)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: monitor.showOffline)
+        .onChange(of: monitor.showOffline) { _, isShowing in
+            AccessibilityNotification.Announcement(isShowing ? "You're offline." : "Back online.").post()
+        }
     }
 }
- 
+
 extension View {
     /// Covers the whole screen with OfflineView while there is no connection.
     func offlineOverlay(_ monitor: NetworkMonitor) -> some View {

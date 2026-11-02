@@ -9,10 +9,11 @@ import SwiftUI
 struct MenuRow: View {
     let systemImage: String
     let title: String
+    var hint: String = ""
     var action: () -> Void = {}
-    
+
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 28
-    
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
@@ -20,20 +21,25 @@ struct MenuRow: View {
                     .font(.callout.weight(.medium))
                     .frame(width: iconSize, height: iconSize)
                     .background(.quaternary, in: Circle())
-                
+                    .accessibilityHidden(true)
+
                 Text(title)
                     .font(.body)
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
             .padding(14)
+            .frame(minHeight: 44)
             .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(hint)
     }
 }

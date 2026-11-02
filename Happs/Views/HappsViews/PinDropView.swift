@@ -12,19 +12,21 @@ import MapKit
 struct PinDropView: View {
     let name: String
     let onConfirm: (CLLocationCoordinate2D) -> Void
-    
+
     @Environment(\.dismiss) private var dismiss
     @State private var pin: CLLocationCoordinate2D?
     @State private var cameraPosition: MapCameraPosition
-    
+    @State private var mapCentre: CLLocationCoordinate2D
+
     init(name: String, center: CLLocationCoordinate2D, onConfirm: @escaping (CLLocationCoordinate2D) -> Void) {
         self.name = name
         self.onConfirm = onConfirm
+        _mapCentre = State(initialValue: center)
         _cameraPosition = State(initialValue: .region(
             MKCoordinateRegion(center: center, latitudinalMeters: 600, longitudinalMeters: 600)
         ))
     }
-    
+
     var body: some View {
         NavigationStack {
             MapReader { proxy in
@@ -34,6 +36,10 @@ struct PinDropView: View {
                         Marker(name, systemImage: "mappin", coordinate: pin)
                             .tint(.green)
                     }
+                }
+                .accessibilityLabel("Map. Move it so the target is where you want the pin.")
+                .onMapCameraChange(frequency: .onEnd) { context in
+                    mapCentre = context.region.center
                 }
                 .onTapGesture { screenPoint in
                     if let coordinate = proxy.convert(screenPoint, from: .local) {
@@ -47,11 +53,12 @@ struct PinDropView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .accessibilityHint("Closes without choosing a spot.")
                 }
             }
         }
     }
-    
+
     @ViewBuilder
     private var bottomBar: some View {
         if let pin {
@@ -62,17 +69,31 @@ struct PinDropView: View {
                 Text("Use this spot")
                     .font(.headline)
                     .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .padding(.vertical, 14)
-                    .background(Color.happsGreen, in: Capsule())
+                    .background(Color.happsGreenFill, in: Capsule())
             }
             .padding()
+            .accessibilityHint("Confirms the pin and closes the map.")
         } else {
-            Text("Tap the map to place your pin")
-                .font(.subheadline)
-                .padding(10)
-                .background(.regularMaterial, in: Capsule())
-                .padding()
+            VStack(spacing: 10) {
+                Text("Tap the map to place your pin, or move the map and use the button below.")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                Button {
+                    pin = mapCentre
+                    AccessibilityNotification.Announcement("Pin placed at \(name).").post()
+                } label: {
+                    Label("Drop pin at map centre", systemImage: "scope")
+                        .font(.headline)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityHint("Places the pin in the middle of the map. Move the map first to choose the spot.")
+            }
+            .padding(12)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .padding()
         }
     }
 }

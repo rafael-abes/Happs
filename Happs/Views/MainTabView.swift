@@ -9,6 +9,7 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject private var notificationStore: NotificationStore
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
+    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 30
 
     private enum Tab {
         case friends, happs, me
@@ -72,9 +73,16 @@ struct MainTabView: View {
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity)
         .background(.bar)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
-    
+    /// What VoiceOver says for a tab. The Me tab includes the unread count from the badge.
+    private func spokenName(for tab: Tab, label: String) -> String {
+        guard tab == .me, notificationStore.unreadCount > 0 else { return label }
+        let count = notificationStore.unreadCount
+        return "\(label), \(count) unread \(count == 1 ? "notification" : "notifications")"
+    }
+
     private func tabButton(
         _ tab: Tab,
         imageName: String,
@@ -88,7 +96,8 @@ struct MainTabView: View {
                 Image(imageName)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 30, height: 30)
+                    .frame(width: iconSize, height: iconSize)
+                    .accessibilityHidden(true)
                     .overlay(alignment: .topTrailing) {
                         if tab == .me && notificationStore.unreadCount > 0 {
                             Text(
@@ -96,11 +105,11 @@ struct MainTabView: View {
                                     ? "99+"
                                     : "\(notificationStore.unreadCount)"
                             )
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.caption2.bold())
                             .foregroundStyle(.white)
                             .padding(.horizontal, 4)
                             .frame(minWidth: 16, minHeight: 16)
-                            .background(.red, in: Capsule())
+                            .background(Color.happsRedFill, in: Capsule())
                             .offset(x: 8, y: -5)
                             .fixedSize()
                         }
@@ -111,11 +120,12 @@ struct MainTabView: View {
             }
             .foregroundStyle(
                 selectedTab == tab
-                    ? .green
-                    : .secondary
+                    ? Color.happsGreenText
+                    : Color.secondary
             )
             .padding(.horizontal, 18)
             .padding(.vertical, 6)
+            .frame(minHeight: 44)
             .background {
                 if selectedTab == tab {
                     Capsule()
@@ -124,6 +134,10 @@ struct MainTabView: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spokenName(for: tab, label: label))
+        .accessibilityHint("Opens the \(label) tab.")
+        .accessibilityAddTraits(selectedTab == tab ? [.isButton, .isSelected] : .isButton)
     }
 
 }

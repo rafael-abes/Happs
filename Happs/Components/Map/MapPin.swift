@@ -9,16 +9,16 @@ import SwiftUI
 struct HappPin: View {
     let happ: Happ
     let isSelected: Bool
-    
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: happ.category.symbolName)
                     .font(.caption.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.black)
                     .frame(width: 26, height: 26)
                     .background(happ.category.tint, in: Circle())
-                
+
                 VStack(alignment: .leading, spacing: 0) {
                     Text(happ.title)
                         .font(.caption.bold())
@@ -34,7 +34,7 @@ struct HappPin: View {
             .background(Color(.systemBackground), in: Capsule())
             .overlay(Capsule().stroke(happ.category.tint, lineWidth: isSelected ? 3 : 2))
             .shadow(radius: 4, y: 2)
-            
+
             Image(systemName: "arrowtriangle.down.fill")
                 .font(.system(size: 10))
                 .foregroundStyle(happ.category.tint)
@@ -42,18 +42,32 @@ struct HappPin: View {
         }
         .scaleEffect(isSelected ? 1.15 : 1, anchor: .bottom)
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            AccessibilityText.happPin(
+                title: happ.title,
+                category: happ.category.rawValue,
+                goingCount: happ.participantIDs.count
+            )
+        )
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
 struct FriendPin: View {
     let friend: UserProfile
     let isSelected: Bool
-    
+
     var body: some View {
         VStack(spacing: 2) {
-            AvatarView(symbol: friend.avatarSymbol, size: 38, ringColor: friend.status.color)
-                .shadow(radius: 3, y: 1)
-                .scaleEffect(isSelected ? 1.2 : 1)
+            AvatarView(
+                symbol: friend.avatarSymbol, photo: friend.avatarPhoto,
+                size: 38,
+                ringColor: friend.status.color,
+                badgeSymbol: friend.status.symbolName
+            )
+            .shadow(radius: 3, y: 1)
+            .scaleEffect(isSelected ? 1.2 : 1)
             Text(friend.displayName)
                 .font(.caption2.bold())
                 .padding(.horizontal, 6)
@@ -61,6 +75,11 @@ struct FriendPin: View {
                 .background(.thinMaterial, in: Capsule())
         }
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            AccessibilityText.friendPin(name: friend.displayName, status: friend.status.rawValue)
+        )
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

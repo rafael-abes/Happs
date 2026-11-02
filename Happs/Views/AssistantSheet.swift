@@ -41,7 +41,10 @@ struct AssistantSheet: View {
                 case .review(let result):
                     reviewSection(result)
                 case .failed(let message):
-                    Section { Text(message).foregroundStyle(.red) }
+                    Section {
+                        Label(message, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.primary)
+                    }
                 }
             }
             .navigationTitle("Describe it")
@@ -53,6 +56,7 @@ struct AssistantSheet: View {
                         SpeechRecognizer.shared.stop()
                         dismiss()
                     }
+                    .accessibilityHint("Closes without changing the form.")
                 }
             }
         }
@@ -66,14 +70,16 @@ struct AssistantSheet: View {
                 TextEditor(text: $sentence)
                     .frame(minHeight: 100)
                     .accessibilityLabel("Describe your Happ")
-                MicButton(text: $sentence, id: "assistant", fixesHapp: true)
+                MicButton(text: $sentence, id: "assistant", fixesHapp: true, fieldName: "description")
             }
             Button {
                 generate()
             } label: {
                 Label("Fill the form", systemImage: "sparkles")
+                    .frame(minHeight: 44)
             }
             .disabled(isWorking || sentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityHint("Sends only your sentence to Gemini and drafts the form.")
         } header: {
             Text("Say what you want to organise")
         } footer: {
@@ -85,6 +91,7 @@ struct AssistantSheet: View {
         Section {
             HStack {
                 ProgressView()
+                    .accessibilityHidden(true)
                 Text("Thinking...")
                 Spacer()
                 Button("Cancel") {
@@ -92,6 +99,7 @@ struct AssistantSheet: View {
                     phase = .idle
                 }
                 .frame(minHeight: 44)
+                .accessibilityHint("Stops the request.")
             }
         }
     }
@@ -126,6 +134,7 @@ struct AssistantSheet: View {
                     dismiss()
                 }
                 .frame(minHeight: 44)
+                .accessibilityHint("Fills in the form with this draft. Nothing is saved yet.")
             }
         }
     }
@@ -136,6 +145,7 @@ struct AssistantSheet: View {
             Spacer()
             Text(value).multilineTextAlignment(.trailing)
         }
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: Actions
@@ -161,6 +171,7 @@ struct AssistantSheet: View {
         SpeechRecognizer.shared.stop()
         let text = sentence
         phase = .working
+        AccessibilityNotification.Announcement("Thinking.").post()
         work = Task {
             do {
                 let assistant = HappAssistant(parser: HappIntentParser(generator: aiService))
@@ -172,11 +183,15 @@ struct AssistantSheet: View {
                 )
                 if Task.isCancelled { return }
                 phase = .review(result)
+                AccessibilityNotification.Announcement("Draft ready. Review it below.").post()
             } catch {
                 if Task.isCancelled { return }
-                phase = .failed(AIError.classify(error).errorDescription ?? "Something went wrong.")
+                let message = AIError.classify(error).errorDescription ?? "Something went wrong."
+                phase = .failed(message)
+                AccessibilityNotification.Announcement(message).post()
             }
         }
     }
 }
+
 

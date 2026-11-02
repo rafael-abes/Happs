@@ -35,21 +35,29 @@ struct AddRecapSheet: View {
                         matching: .images
                     ) {
                         Label(drafts.isEmpty ? "Choose photos" : "Change photos", systemImage: "photo.on.rectangle")
+                            .frame(minHeight: 44)
                     }
                     .disabled(isPosting)
+                    .accessibilityHint("You can add \(slotsLeft) more \(slotsLeft == 1 ? "photo" : "photos").")
                 } footer: {
                     Text("You can add \(slotsLeft) more \(slotsLeft == 1 ? "photo" : "photos"). Only people who joined this Happ can see them.")
                 }
 
                 if isLoading {
-                    Section { ProgressView("Preparing photos...") }
+                    Section {
+                        ProgressView("Preparing photos...")
+                            .accessibilityLabel("Preparing photos")
+                    }
                 }
 
                 ForEach($drafts) { $draft in
+                    let index = drafts.firstIndex { $0.id == draft.id } ?? 0
                     Section {
-                        thumbnail(draft)
+                        thumbnail(draft, index: index, total: drafts.count)
                         TextField("Add a caption (optional)", text: $draft.caption)
                             .disabled(isPosting)
+                            .accessibilityLabel("Caption for photo \(index + 1)")
+                            .accessibilityHint("Describe the photo. Screen reader users hear this caption.")
                     }
                 }
             }
@@ -57,11 +65,16 @@ struct AddRecapSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }.disabled(isPosting)
+                    Button("Cancel") { dismiss() }
+                        .disabled(isPosting)
+                        .accessibilityHint("Closes without posting.")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isPosting ? "Posting..." : "Post") { post() }
                         .disabled(drafts.isEmpty || isPosting || isLoading)
+                        .accessibilityLabel("Post")
+                        .accessibilityValue(isPosting ? "Posting" : "")
+                        .accessibilityHint("Shares your photos with the people who joined this Happ.")
                 }
             }
             .onChange(of: pickerItems) { _, items in
@@ -77,7 +90,7 @@ struct AddRecapSheet: View {
     }
 
     @ViewBuilder
-    private func thumbnail(_ draft: RecapDraft) -> some View {
+    private func thumbnail(_ draft: RecapDraft, index: Int, total: Int) -> some View {
         if let image = UIImage(data: draft.full) {
             Image(uiImage: image)
                 .resizable()
@@ -85,7 +98,8 @@ struct AddRecapSheet: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 180)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
-                .accessibilityLabel("Selected photo")
+                .accessibilityLabel("Selected photo \(index + 1) of \(total)")
+                .accessibilityAddTraits(.isImage)
         }
     }
 

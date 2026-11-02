@@ -84,9 +84,12 @@ struct HappsListView: View {
                             Button(showsMap ? "List" : "Map", systemImage: showsMap ? "list.bullet" : "map") {
                                 showsMap.toggle()
                             }
+                            .accessibilityLabel(showsMap ? "Show list" : "Show map")
+                            .accessibilityHint("Switches between the campus map and the list of Happs.")
                         }
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Create Happ", systemImage: "plus") { isPresentingEditor = true }
+                                .accessibilityHint("Opens a form to make a new Happ.")
                         }
                     }
                 }
@@ -124,6 +127,7 @@ struct HappsListView: View {
     private var happsList: some View {
         if happStore.isLoading && happStore.happs.isEmpty {
             ProgressView("Loading happs…")
+                .accessibilityLabel("Loading happs")
         } else if happStore.happs.isEmpty {
             ContentUnavailableView(
                 "No Happs Yet",
@@ -177,6 +181,7 @@ struct HappsListView: View {
         } label: {
             HappRow(happ: happ, currentUserID: currentUserID, isEnded: isEnded)
         }
+        .accessibilityHint("Opens the details.")
     }
 
     /// Attendees get a plain row. Everyone else gets the locked, blurred card.
@@ -196,6 +201,7 @@ struct HappsListView: View {
                 LockedRecapCard(happ: happ, previews: previews)
             }
         }
+        .accessibilityHint("Opens the recap.")
     }
 
     private var storeErrorIsPresented: Binding<Bool> {
@@ -217,9 +223,10 @@ private struct AttendeeRecapLabel: View {
         HStack(spacing: 12) {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.title3)
-                .foregroundStyle(Color.happsGreen)
+                .foregroundStyle(Color.happsGreenText)
                 .frame(width: 40, height: 40)
                 .background(Color.happsGreen.opacity(0.15), in: Circle())
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(happ.title).font(.headline)
                 Text(subtitle)
@@ -227,6 +234,11 @@ private struct AttendeeRecapLabel: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "Recap for \(happ.title), \(photoCount == 1 ? "1 photo" : "\(photoCount) photos")\(canAdd ? ", you can add yours" : "")"
+        )
     }
 }
 
@@ -235,10 +247,11 @@ private struct HappRow: View {
     let currentUserID: String
     let isEnded: Bool
 
-    private var badge: (text: String, color: Color)? {
-        if isEnded { return ("Ended", .secondary) }
-        if happ.containsParticipant(currentUserID) { return ("Joined", .green) }
-        if happ.isInvited(currentUserID) { return ("Invited", .orange) }
+    /// Text, symbol and an accessible colour. The symbol means colour is never the only cue.
+    private var badge: (text: String, symbol: String, color: Color)? {
+        if isEnded { return ("Ended", "clock", .secondary) }
+        if happ.containsParticipant(currentUserID) { return ("Joined", "checkmark", Color.happsGreenText) }
+        if happ.isInvited(currentUserID) { return ("Invited", "envelope", .primary) }
         return nil
     }
 
@@ -248,7 +261,7 @@ private struct HappRow: View {
                 Text(happ.title)
                     .font(.headline)
                 if let badge {
-                    Text(badge.text)
+                    Label(badge.text, systemImage: badge.symbol)
                         .font(.caption)
                         .foregroundStyle(badge.color)
                 }
@@ -258,8 +271,18 @@ private struct HappRow: View {
                 .foregroundStyle(.secondary)
             Text(happ.timeRangeText)
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
         }
-        .opacity(isEnded ? 0.6 : 1)
+        .frame(minHeight: 44, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            AccessibilityText.happRow(
+                title: happ.title,
+                badge: badge?.text,
+                category: happ.category.rawValue,
+                location: happ.location,
+                time: happ.timeRangeText
+            )
+        )
     }
 }

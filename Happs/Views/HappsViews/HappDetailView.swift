@@ -44,12 +44,14 @@ struct HappDetailView: View {
         .toolbar {
             if let happ {
                 ToolbarItem(placement: .primaryAction) {
-                    SpeakButton(id: happ.id, text: happ.spokenSummary)
+                    SpeakButton(id: happ.id, text: happ.spokenSummary, subject: happ.title)
                 }
             }
             if let happ, happ.creatorID == authService.user?.uid {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Edit") { isEditing = true }
+                        .accessibilityLabel("Edit Happ")
+                        .accessibilityHint("Change the title, place or time.")
                 }
             }
         }
@@ -92,10 +94,15 @@ struct HappDetailView: View {
  
             Section("Details") {
                 LabeledContent("Category", value: happ.category.rawValue)
+                    .accessibilityElement(children: .combine)
                 LabeledContent("Location", value: happ.location)
+                    .accessibilityElement(children: .combine)
                 LabeledContent("When", value: happ.timeRangeText)
+                    .accessibilityElement(children: .combine)
                 LabeledContent("Organiser", value: happ.creatorName)
+                    .accessibilityElement(children: .combine)
                 LabeledContent("Going", value: "\(happ.participantIDs.count)")
+                    .accessibilityElement(children: .combine)
             }
  
             if happ.hasEnded(at: Date()) {
@@ -105,6 +112,7 @@ struct HappDetailView: View {
                     } label: {
                         Label("Recap", systemImage: "photo.on.rectangle.angled")
                     }
+                    .accessibilityHint("Opens the photo timeline for this Happ.")
                 }
             }
  
@@ -112,14 +120,22 @@ struct HappDetailView: View {
                 if happ.creatorID == currentUserID {
                     Button("Cancel Happ", role: .destructive) { pendingAction = .cancel }
                         .disabled(isWorking)
+                        .frame(minHeight: 44)
+                        .accessibilityHint("Asks you to confirm. It is removed for everyone who joined.")
                 } else if happ.containsParticipant(currentUserID) {
                     Button("Leave Happ", role: .destructive) { pendingAction = .leave }
                         .disabled(isWorking)
+                        .frame(minHeight: 44)
+                        .accessibilityValue(isWorking ? "Working" : "")
+                        .accessibilityHint("Asks you to confirm before you leave.")
                 } else {
                     Button("Join Happ") {
                         setParticipation(happ: happ, userID: currentUserID, isJoining: true)
                     }
                     .disabled(isWorking)
+                    .frame(minHeight: 44)
+                    .accessibilityValue(isWorking ? "Working" : "")
+                    .accessibilityHint("Adds you to the people going to \(happ.title).")
                 }
             }
         }
@@ -144,6 +160,9 @@ struct HappDetailView: View {
             defer { isWorking = false }
             do {
                 try await happStore.toggleParticipation(happID: happ.id, userID: userID, isJoining: isJoining)
+                AccessibilityNotification.Announcement(
+                    isJoining ? "You joined \(happ.title)." : "You left \(happ.title)."
+                ).post()
             } catch {
                 errorMessage = error.localizedDescription
             }

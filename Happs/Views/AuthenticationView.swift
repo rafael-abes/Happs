@@ -9,9 +9,19 @@ import SwiftUI
 private enum AuthMode: String, Hashable {
     case logIn = "Log in"
     case signUp = "Sign Up"
+
+    /// What the landing pill says it opens, for VoiceOver.
+    var hint: String {
+        switch self {
+        case .logIn: "Opens the log in form."
+        case .signUp: "Opens the sign up form."
+        }
+    }
 }
 
 struct AuthenticationView: View {
+    @ScaledMetric(relativeTo: .largeTitle) private var logoSize: CGFloat = 110
+
     var body: some View {
         NavigationStack {
             landing
@@ -22,51 +32,56 @@ struct AuthenticationView: View {
     }
     
     private var landing: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            logoPlaceholder
-            Text("Hello")
-                .font(.system(size: 44, weight: .bold))
-                .padding(.top, 24)
-            Text("Welcome to Happs")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            VStack(spacing: 16) {
-                NavigationLink(value: AuthMode.logIn) { filledPill("Log in") }
-                NavigationLink(value: AuthMode.signUp) { outlinedPill("Sign Up") }
+        ScrollView {
+            VStack(spacing: 0) {
+                logoPlaceholder
+                    .padding(.top, 40)
+                Text("Hello")
+                    .font(.largeTitle.bold())
+                    .padding(.top, 24)
+                    .accessibilityAddTraits(.isHeader)
+                Text("Welcome to Happs")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                VStack(spacing: 16) {
+                    NavigationLink(value: AuthMode.logIn) { filledPill("Log in") }
+                        .accessibilityHint(AuthMode.logIn.hint)
+                    NavigationLink(value: AuthMode.signUp) { outlinedPill("Sign Up") }
+                        .accessibilityHint(AuthMode.signUp.hint)
+                }
+                .padding(.top, 40)
             }
-            .padding(.top, 40)
-            Spacer(minLength: 0)
-            Spacer(minLength: 0)
+            .padding(.horizontal, 36)
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 36)
-        .frame(maxWidth: 480)
-        .frame(maxWidth: .infinity)
+        .scrollBounceBehavior(.basedOnSize)
     }
     
     private var logoPlaceholder: some View {
         Image("AppIcon")
             .resizable()
             .scaledToFit()
-            .frame(width: 110, height: 110)
+            .frame(width: logoSize, height: logoSize)
+            .accessibilityHidden(true)
     }
     
     private func filledPill(_ title: String) -> some View {
         Text(title)
             .font(.title3.weight(.medium))
             .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .padding(.vertical, 18)
-            .background(Color.happsGreen, in: Capsule())
+            .background(Color.happsGreenFill, in: Capsule())
     }
     
     private func outlinedPill(_ title: String) -> some View {
         Text(title)
             .font(.title3.weight(.medium))
-            .foregroundStyle(Color.happsGreen)
-            .frame(maxWidth: .infinity)
+            .foregroundStyle(Color.happsGreenText)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .padding(.vertical, 18)
-            .overlay(Capsule().stroke(Color.happsGreen, lineWidth: 3))
+            .overlay(Capsule().stroke(Color.happsGreenText, lineWidth: 3))
     }
 }
 
@@ -106,16 +121,21 @@ private struct AuthFormView: View {
             if mode == .signUp {
                 TextField("Display name", text: $displayName)
                     .textContentType(.name)
+                    .accessibilityLabel("Display name")
             }
             TextField("Email address", text: $email)
                 .keyboardType(.emailAddress)
                 .textContentType(.emailAddress)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .accessibilityLabel("Email address")
             SecureField("Password", text: $password)
                 .textContentType(mode == .logIn ? .password : .newPassword)
+                .accessibilityLabel("Password")
+                .accessibilityHint(mode == .logIn ? "Enter your password." : "Choose a password for your new account.")
         }
         .textFieldStyle(.roundedBorder)
+        .frame(minHeight: 44)
     }
     
     private var submitButton: some View {
@@ -127,9 +147,13 @@ private struct AuthFormView: View {
             .font(.headline)
             .foregroundStyle(.white)
             .padding(.vertical, 14)
-            .background(Color.happsGreen, in: Capsule())
+            .frame(minHeight: 44)
+            .background(Color.happsGreenFill, in: Capsule())
         }
         .disabled(isWorking)
+        .accessibilityLabel(mode.rawValue)
+        .accessibilityValue(isWorking ? "Working" : "")
+        .accessibilityHint(mode == .logIn ? "Logs in with your email and password." : "Creates your account.")
     }
     
     private var orDivider: some View {
@@ -138,16 +162,18 @@ private struct AuthFormView: View {
             Text("OR").font(.caption).foregroundStyle(.secondary)
             VStack { Divider() }
         }
+        .accessibilityHidden(true)
     }
     
     private var googleButton: some View {
         Button(action: signInWithGoogle) {
             Label("Continue with Google", systemImage: "g.circle.fill")
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
         .disabled(isWorking)
+        .accessibilityHint("Opens a Google page to sign in.")
     }
     
     private var errorIsPresented: Binding<Bool> {

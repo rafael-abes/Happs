@@ -16,7 +16,7 @@ struct LocationPickerView: View {
     @Binding var isOffCampus: Bool
     @EnvironmentObject private var locationService: LocationService
     @Environment(\.dismiss) private var dismiss
-    
+
     @State private var placesService = PlacesService()
     @State private var searchText = ""
     @State private var results: [MKMapItem] = []
@@ -24,25 +24,25 @@ struct LocationPickerView: View {
     @State private var isDroppingPin = false
     @State private var pinPlaced = false
     @State private var errorMessage: String?
-    
+
     private var trimmedQuery: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    
+
     private var resultsTitle: String {
         trimmedQuery.isEmpty ? "Nearby places" : "Suggestions"
     }
-    
+
     private var emptyMessage: String {
         trimmedQuery.isEmpty
             ? "No nearby spots found."
             : "No suggestions. You can still use what you typed above."
     }
-    
+
     private var offCampusTitle: String {
         trimmedQuery.isEmpty ? "Off campus" : "Off campus: \"\(trimmedQuery)\""
     }
-    
+
     private var searchCenter: CLLocationCoordinate2D {
         if let current = locationService.currentCoordinate { return current }
         let points = LocationService.campusBoundary
@@ -52,7 +52,7 @@ struct LocationPickerView: View {
             longitude: points.map(\.longitude).reduce(0, +) / count
         )
     }
-    
+
     var body: some View {
         NavigationStack {
             List {
@@ -67,6 +67,7 @@ struct LocationPickerView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .accessibilityHint("Closes without choosing a location.")
                 }
             }
             .sheet(isPresented: $isDroppingPin, onDismiss: {
@@ -86,25 +87,31 @@ struct LocationPickerView: View {
             }
         }
     }
-    
+
     private var optionsSection: some View {
         Section {
             if !trimmedQuery.isEmpty {
                 Button(action: useTypedLocation) {
                     Label("Use \"\(trimmedQuery)\"", systemImage: "pencil.and.scribble")
+                        .frame(minHeight: 44)
                 }
+                .accessibilityHint("Uses the text exactly as you typed it.")
                 Button { isDroppingPin = true } label: {
                     Label("Drop a pin for \"\(trimmedQuery)\"", systemImage: "mappin.and.ellipse")
+                        .frame(minHeight: 44)
                 }
+                .accessibilityHint("Opens a map so you can choose the exact spot.")
             }
             Button(action: useOffCampus) {
                 Label(offCampusTitle, systemImage: "location.slash")
+                    .frame(minHeight: 44)
             }
+            .accessibilityHint("Marks it as off campus. It will not show on the campus map.")
         } footer: {
             Text("Off campus Happs show in the list but not on the campus map.")
         }
     }
-    
+
     private var resultsSection: some View {
         Section(resultsTitle) {
             if results.isEmpty {
@@ -117,7 +124,7 @@ struct LocationPickerView: View {
             }
         }
     }
-    
+
     private func resultRow(_ item: MKMapItem) -> some View {
         Button { select(item) } label: {
             VStack(alignment: .leading, spacing: 2) {
@@ -129,13 +136,19 @@ struct LocationPickerView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .frame(minHeight: 44, alignment: .leading)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            [item.name ?? "Unknown place", item.placemark.title].compactMap { $0 }.joined(separator: ", ")
+        )
+        .accessibilityHint("Double tap to choose this place.")
     }
-    
+
     private var errorIsPresented: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
-    
+
     private func scheduleSearch() {
         searchTask?.cancel()
         searchTask = Task {
@@ -144,7 +157,7 @@ struct LocationPickerView: View {
             await runSearch()
         }
     }
-    
+
     private func runSearch() async {
         do {
             let found: [MKMapItem]
@@ -161,6 +174,9 @@ struct LocationPickerView: View {
             }
             guard !Task.isCancelled else { return }
             results = found
+            AccessibilityNotification.Announcement(
+                found.isEmpty ? "No places found." : "\(found.count) \(found.count == 1 ? "place" : "places") found."
+            ).post()
         } catch is CancellationError {
             return
         } catch let error as MKError where error.code == .placemarkNotFound {
@@ -171,7 +187,7 @@ struct LocationPickerView: View {
             errorMessage = error.localizedDescription
         }
     }
-    
+
     private func select(_ item: MKMapItem) {
         let coordinate = item.placemark.coordinate
         selectedName = item.name ?? "Unknown place"
@@ -179,14 +195,14 @@ struct LocationPickerView: View {
         isOffCampus = !LocationService.isInside(coordinate, polygon: LocationService.campusBoundary)
         dismiss()
     }
-    
+
     private func useTypedLocation() {
         selectedName = trimmedQuery
         selectedCoordinate = nil
         isOffCampus = false
         dismiss()
     }
-    
+
     private func useOffCampus() {
         selectedName = trimmedQuery.isEmpty ? "Off campus" : "\(trimmedQuery) (off campus)"
         selectedCoordinate = nil

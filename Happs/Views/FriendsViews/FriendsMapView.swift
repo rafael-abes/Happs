@@ -47,6 +47,8 @@ struct FriendsMapView: View {
             MapUserLocationButton()
             MapCompass()
         }
+        .accessibilityLabel("Map showing \(friendStore.onlineFriends.count) \(friendStore.onlineFriends.count == 1 ? "friend" : "friends") on campus")
+        .accessibilityHint("Friends are also listed on the Friends list. Use Show list in the toolbar.")
         .onAppear(perform: centerCamera)
         .safeAreaInset(edge: .bottom) {
             if let friend = selectedFriend {
@@ -67,6 +69,8 @@ struct FriendsMapView: View {
                 ) {
                     FriendPin(friend: friend, isSelected: selectedFriendID == friend.id)
                         .onTapGesture { selectedFriendID = friend.id }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Double tap to show this friend's details.")
                 }
                 .annotationTitles(.hidden)
             }

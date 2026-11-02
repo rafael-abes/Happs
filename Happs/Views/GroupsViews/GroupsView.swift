@@ -38,6 +38,7 @@ struct GroupsView: View {
                         } label: {
                             groupRow(group)
                         }
+                        .accessibilityHint("Opens the group.")
                     }
                 }
             }
@@ -47,6 +48,8 @@ struct GroupsView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("New Group", systemImage: "plus") { isPresentingNew = true }
+                    .accessibilityLabel("New group")
+                    .accessibilityHint("Opens a form to create a group.")
             }
         }
         .task(id: allIDs) { await groupStore.resolveNames(for: allIDs) }
@@ -63,17 +66,22 @@ struct GroupsView: View {
     }
     
     private func groupRow(_ group: FriendGroup) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        let isOwner = group.ownerID == authService.user?.uid
+        let members = "\(group.memberIDs.count) member\(group.memberIDs.count == 1 ? "" : "s")"
+        return VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(group.name).font(.headline)
-                if group.ownerID == authService.user?.uid {
-                    Text("Owner").font(.caption).foregroundStyle(.green)
+                if isOwner {
+                    Text("Owner").font(.caption).foregroundStyle(Color.happsGreenText)
                 }
             }
-            Text("\(group.memberIDs.count) member\(group.memberIDs.count == 1 ? "" : "s")")
+            Text(members)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .frame(minHeight: 44, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(group.name), \(isOwner ? "you are the owner, " : "")\(members)")
     }
     
     @ViewBuilder

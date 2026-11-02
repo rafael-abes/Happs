@@ -10,6 +10,8 @@ import FirebaseAuth
 /// Loads one private photo through a signed URL.
 struct RecapImageView: View {
     let path: String
+    /// What VoiceOver says for the photo. Built from author and caption by the caller.
+    var accessibilityDescription = "Photo"
 
     @State private var image: UIImage?
     @State private var failed = false
@@ -20,13 +22,17 @@ struct RecapImageView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
+                    .accessibilityLabel(accessibilityDescription)
+                    .accessibilityAddTraits(.isImage)
             } else if failed {
                 Label("Couldn't load photo", systemImage: "exclamationmark.triangle")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(height: 120)
             } else {
-                ProgressView().frame(height: 160)
+                ProgressView()
+                    .frame(height: 160)
+                    .accessibilityLabel("Loading photo")
             }
         }
         .frame(maxWidth: .infinity)
@@ -123,12 +129,13 @@ struct RecapTimelineView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(happ.title).font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
             Text("\(happ.category.rawValue) at \(happ.location)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Text(endsAt.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -147,9 +154,10 @@ struct RecapTimelineView: View {
                 Label("Add your recap", systemImage: "plus.circle.fill")
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(Color.happsGreen, in: Capsule())
+                    .background(Color.happsGreenFill, in: Capsule())
                     .foregroundStyle(.white)
             }
+            .accessibilityHint("\(slotsLeft) \(slotsLeft == 1 ? "photo" : "photos") left to add.")
             Text("\(slotsLeft) \(slotsLeft == 1 ? "photo" : "photos") left. The window closes \(RecapRules.windowCloses(endsAt: endsAt).formatted(date: .abbreviated, time: .shortened)).")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -168,6 +176,7 @@ struct RecapTimelineView: View {
     @ViewBuilder
     private var timeline: some View {
         Text("Shared timeline").font(.headline)
+            .accessibilityAddTraits(.isHeader)
         if recaps.isEmpty {
             ContentUnavailableView(
                 "No recaps yet",
@@ -175,13 +184,13 @@ struct RecapTimelineView: View {
                 description: Text("Photos from this Happ will show up here.")
             )
         } else {
-            ForEach(recaps) { recap in
-                recapCard(recap)
+            ForEach(Array(recaps.enumerated()), id: \.element.id) { index, recap in
+                recapCard(recap, index: index, total: recaps.count)
             }
         }
     }
 
-    private func recapCard(_ recap: Recap) -> some View {
+    private func recapCard(_ recap: Recap, index: Int, total: Int) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -199,10 +208,16 @@ struct RecapTimelineView: View {
                             .frame(minWidth: 44, minHeight: 44)
                     }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("Delete photo")
+                    .accessibilityLabel("Delete photo by \(recap.authorName)")
+                    .accessibilityHint("Asks you to confirm before it is removed.")
                 }
             }
-            RecapImageView(path: recap.storagePath)
+            RecapImageView(
+                path: recap.storagePath,
+                accessibilityDescription: AccessibilityText.photoPosition(index: index + 1, total: total)
+                    + " "
+                    + AccessibilityText.recapPhoto(author: recap.authorName, caption: recap.caption)
+            )
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             if !recap.caption.isEmpty {
                 Text(recap.caption).font(.subheadline)

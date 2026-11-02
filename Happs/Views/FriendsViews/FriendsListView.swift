@@ -11,6 +11,7 @@ struct FriendsListView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var friendStore: FriendStore
     @EnvironmentObject private var groupStore: GroupStore
+    @Environment(\.dynamicTypeSize) private var typeSize
     
     @State private var isPresentingAddFriends = false
     @State private var showsMap = false
@@ -31,9 +32,12 @@ struct FriendsListView: View {
                     Button(showsMap ? "List" : "Map", systemImage: showsMap ? "list.bullet" : "map") {
                         showsMap.toggle()
                     }
+                    .accessibilityLabel(showsMap ? "Show list" : "Show map")
+                    .accessibilityHint("Switches between your friends list and the campus map.")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Add Friends", systemImage: "plus") { isPresentingAddFriends = true }
+                        .accessibilityHint("Opens a search to find and add friends.")
                 }
             }
             .sheet(isPresented: $isPresentingAddFriends) { AddFriendsView() }
@@ -64,6 +68,7 @@ struct FriendsListView: View {
                 } label: {
                     groupsRow
                 }
+                .accessibilityHint("Opens your groups and invitations.")
             }
             
             if !friendStore.incomingRequests.isEmpty {
@@ -100,25 +105,52 @@ struct FriendsListView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .background(.red, in: Capsule())
+                    .background(Color.happsRedFill, in: Capsule())
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            AccessibilityText.groupsRow(
+                groupCount: groupStore.groups.count,
+                newInvitations: groupStore.invitations.count
+            )
+        )
     }
     
     private func friendRow(_ friend: UserProfile) -> some View {
-        HStack {
-            AvatarView(symbol: friend.avatarSymbol, size: 36, ringColor: friend.isVisible ? friend.status.color : nil)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(friend.displayName)
-                if friendStore.isOnlineOnCampus(friend) {
-                    Label("On campus", systemImage: "location.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.green)
+        let onCampus = friendStore.isOnlineOnCampus(friend)
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout())
+        return layout {
+            HStack {
+                AvatarView(
+                    symbol: friend.avatarSymbol,
+                    size: 36,
+                    ringColor: friend.isVisible ? friend.status.color : nil,
+                    badgeSymbol: friend.isVisible ? friend.status.symbolName : nil
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(friend.displayName)
+                    if onCampus {
+                        Label("On campus", systemImage: "location.fill")
+                            .font(.caption2)
+                            .foregroundStyle(Color.happsGreenText)
+                    }
                 }
             }
-            Spacer()
+            if !typeSize.isAccessibilitySize { Spacer() }
             statusLabel(for: friend)
         }
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            AccessibilityText.friendRow(
+                name: friend.displayName,
+                status: friend.status.rawValue,
+                isVisible: friend.isVisible,
+                isOnCampus: onCampus
+            )
+        )
+        .accessibilityAction(named: "Remove \(friend.displayName)") { friendPendingRemoval = friend }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button("Remove", role: .destructive) { friendPendingRemoval = friend }
         }
@@ -146,9 +178,9 @@ struct FriendsListView: View {
         if friend.isVisible == false {
             Text("Hidden").font(.caption).foregroundStyle(.secondary)
         } else {
-            Label(friend.status.rawValue, systemImage: "circle.fill")
+            Label(friend.status.rawValue, systemImage: friend.status.symbolName)
                 .font(.caption)
-                .foregroundStyle(friend.status.color)
+                .foregroundStyle(.secondary)
         }
     }
     
@@ -164,3 +196,4 @@ struct FriendsListView: View {
         Task { await friendStore.removeFriend(friend.id, currentUserID: userID) }
     }
 }
+
