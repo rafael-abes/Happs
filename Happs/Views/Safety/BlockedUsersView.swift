@@ -6,10 +6,17 @@
 //
 
 
+// CODE OVERVIEW
+// Settings sub-screen that lists blocked people and lets the user unblock them. It is a thin view:
+// the list comes from SafetyStore (@EnvironmentObject, observed so the list updates when it
+// changes) and unblocking is delegated to SafetyStore.unblock. AuthService supplies the current
+// user id. A spoken announcement confirms the action because the row disappears afterwards.
+//
 import SwiftUI
-import FirebaseAuth
 
+/// The Blocked People screen (a List with an empty state).
 struct BlockedUsersView: View {
+        // Both stores are injected from higher in the view tree.
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var safetyStore: SafetyStore
 
@@ -39,6 +46,8 @@ struct BlockedUsersView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+        /// Unblocks one person. Does nothing if nobody is signed in. The store call is async, so it runs
+        /// in a Task, and a VoiceOver announcement is posted when it finishes.
     private func unblock(_ person: BlockedUser) {
         guard let userID = authService.user?.uid else { return }
         Task {
@@ -47,3 +56,4 @@ struct BlockedUsersView: View {
         }
     }
 }
+

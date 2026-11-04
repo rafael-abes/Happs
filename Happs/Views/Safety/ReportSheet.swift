@@ -6,16 +6,26 @@
 //
 
 
+// CODE OVERVIEW
+// A form sheet used to report content or a person (photo, Happ, group, profile). The caller builds
+// a ReportTarget describing what is reported and presents this sheet; the sheet gathers reason
+// and details, then calls SafetyStore.report, which does the saving. Keeping the writing in the
+// store (not the view) means the view only manages form state. Local @State tracks the form,
+// sending and success so the same sheet can show either the form or a confirmation.
+//
 import SwiftUI
-import FirebaseAuth
 
+/// The report form. Shows a thank-you state after a successful send.
 struct ReportSheet: View {
+        /// What is being reported (kind, who, a summary and an optional id to hide it locally).
     let target: ReportTarget
 
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var safetyStore: SafetyStore
+        // Closes the sheet; provided by SwiftUI so the view does not need to know how it was presented.
     @Environment(\.dismiss) private var dismiss
 
+        // Form state. hideForMe defaults to true (see the SAFETY note above).
     @State private var reason: ReportReason = .harassment
     @State private var details = ""
     @State private var hideForMe = true
@@ -23,7 +33,10 @@ struct ReportSheet: View {
     @State private var errorMessage: String?
     @State private var isSent = false
 
+        /// Maximum characters allowed in the details box.
     private let limit = 500
+
+        // MARK: Body
 
     var body: some View {
         NavigationStack {
@@ -56,6 +69,8 @@ struct ReportSheet: View {
                     Section {
                         TextField("Add details (optional)", text: $details, axis: .vertical)
                             .lineLimit(3...6)
+                                                        // Trims the text back to the limit as the user types or pastes.
+                                                        // (The `_` ignores the old value; `new` is the updated text.)
                             .onChange(of: details) { _, new in
                                 if new.count > limit { details = String(new.prefix(limit)) }
                             }
@@ -66,6 +81,7 @@ struct ReportSheet: View {
                         Text("Details")
                     }
 
+                                        // Only show the hide option when the target has an id that can be hidden.
                     if target.hideID != nil {
                         Section {
                             Toggle("Hide this for me", isOn: $hideForMe)
@@ -100,6 +116,9 @@ struct ReportSheet: View {
         }
     }
 
+        /// Sends the report. Does nothing if no one is signed in. Runs async in a Task; `defer` always
+        /// clears `isSending`, whether it succeeds or throws. The hide flag is only passed as true when
+        /// the target supports hiding.
     private func send() {
         guard let userID = authService.user?.uid else { return }
         isSending = true

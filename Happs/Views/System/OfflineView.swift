@@ -5,12 +5,20 @@
 //  Created by Rafa Abes on 10/23/26.
 //
 
+// CODE OVERVIEW
+// Full-screen "no internet" page. It is driven by NetworkMonitor (an ObservableObject passed in as
+// @ObservedObject, because the monitor is owned elsewhere, not by this view). The view only shows state
+// (isChecking, showOffline) and calls monitor.retry(). The offlineOverlay modifier at the bottom lets the
+// app root cover any content with this page using a ZStack, instead of navigating to it, so the user
+// returns to exactly where they were once the connection is back.
 import SwiftUI
 
 /// Full-screen page shown while the device has no internet connection.
 struct OfflineView: View {
+    // @ObservedObject: observes an object owned by someone else. @StateObject would be for the owner.
     @ObservedObject var monitor: NetworkMonitor
 
+    // Icon size scales with the user's Dynamic Type setting.
     @ScaledMetric private var iconSize = 72.0
 
     var body: some View {
@@ -33,6 +41,7 @@ struct OfflineView: View {
                     .padding(.horizontal, 32)
 
                 Button {
+                    // Button actions are synchronous, so a Task wraps the async retry call.
                     Task { await monitor.retry() }
                 } label: {
                     HStack(spacing: 8) {
@@ -60,16 +69,20 @@ struct OfflineView: View {
     }
 }
 
+/// ViewModifier that layers OfflineView over any content while monitor.showOffline is true. Private, used through the offlineOverlay extension.
 private struct OfflineOverlay: ViewModifier {
     @ObservedObject var monitor: NetworkMonitor
+    // Reads the Reduce Motion setting so animation can be skipped.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
+        // Content stays in the hierarchy underneath, so its state is kept while the overlay is up.
         ZStack {
             content
             if monitor.showOffline {
                 OfflineView(monitor: monitor)
                     .transition(reduceMotion ? .identity : .opacity)
+                    // Keeps the overlay above content so the transition animates correctly when it is inserted or removed.
                     .zIndex(1)
             }
         }
@@ -80,9 +93,11 @@ private struct OfflineOverlay: ViewModifier {
     }
 }
 
+/// Adds the .offlineOverlay(monitor) call syntax.
 extension View {
     /// Covers the whole screen with OfflineView while there is no connection.
     func offlineOverlay(_ monitor: NetworkMonitor) -> some View {
         modifier(OfflineOverlay(monitor: monitor))
     }
 }
+

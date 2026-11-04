@@ -4,15 +4,26 @@
 //
 //  Created by Rafa Abes on 10/23/26.
 //
+// CODE OVERVIEW
+// First-run welcome tour. OnboardingPage is the data (an array of static content), OnboardingView draws a
+// paged TabView with dots, Skip and Next, and OnboardingStore remembers in UserDefaults that an account has
+// seen it. The key includes the user ID, so each account sees the tour once even on a shared phone.
+// OnboardingGate is a ViewModifier applied through .onboarding(for:), which shows the tour in a full
+// screen cover the first time a signed-in user reaches the main app.
 import SwiftUI
 
+/// Content of one tour page. Private to this file. Identifiable so ForEach can loop over it.
 private struct OnboardingPage: Identifiable {
+    // A new random id per instance, only for SwiftUI identity (not stored anywhere).
     let id = UUID()
+    /// SF Symbol name for the page icon.
     let symbol: String
     let title: String
     let message: String
+    /// Bullet points shown in the card.
     let tips: [String]
 
+    /// The six pages in order. Static data so the view needs no setup.
     static let all: [OnboardingPage] = [
         OnboardingPage(
             symbol: "figure.2.arms.open",
@@ -79,9 +90,12 @@ private struct OnboardingPage: Identifiable {
 }
 
 /// Remembers, per account, whether the welcome tour has been shown.
+/// Namespace (a caseless enum cannot be instantiated) for the UserDefaults helpers.
 enum OnboardingStore {
+    // One flag per account.
     private static func key(_ userID: String) -> String { "hasSeenOnboarding.\(userID)" }
 
+    /// The defaults parameter lets tests pass in a throwaway UserDefaults instead of the real one.
     static func hasSeen(_ userID: String, defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: key(userID))
     }
@@ -91,16 +105,21 @@ enum OnboardingStore {
     }
 }
 
+/// The tour screen.
 struct OnboardingView: View {
+    /// Called when the user taps Skip or Get started. The caller decides what finishing means.
     let onFinish: () -> Void
 
+    // Index of the current page, bound to the TabView selection and read by the dots.
     @State private var page = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric private var iconSize = 84.0
+    // Copied once so the view does not repeat the static lookup.
     private let pages = OnboardingPage.all
 
     private var isLast: Bool { page == pages.count - 1 }
 
+    // Layout from top to bottom: Skip, paged content, page dots, main button.
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -110,17 +129,20 @@ struct OnboardingView: View {
                     .accessibilityLabel("Skip the tour")
                     .accessibilityHint("Goes straight to the app.")
                     .frame(minWidth: 44, minHeight: 44)
+                    // Skip is hidden and disabled on the last page but still takes space, so the layout does not jump.
                     .opacity(isLast ? 0 : 1)
                     .disabled(isLast)
             }
             .padding(.horizontal)
 
+            // A TabView in page style gives swipeable pages. Each page's .tag(index) matches the selection value.
             TabView(selection: $page) {
                 ForEach(Array(pages.enumerated()), id: \.element.id) { index, item in
                     pageView(item).tag(index)
                 }
             }
  .tabViewStyle(.page(indexDisplayMode: .never))
+            // Fires on swipe, button or dots, so the VoiceOver announcement covers all of them.
             .onChange(of: page) { _, newPage in
                 AccessibilityNotification.Announcement(
                     "Page \(newPage + 1) of \(pages.count), \(pages[newPage].title)"
@@ -134,6 +156,7 @@ struct OnboardingView: View {
                 if isLast {
                     onFinish()
                 } else {
+                    // Same change either way, animated only when Reduce Motion is off.
                     if reduceMotion { page += 1 } else { withAnimation { page += 1 } }
                 }
             } label: {
@@ -150,6 +173,7 @@ struct OnboardingView: View {
         .background(Color(.systemBackground))
     }
 
+    /// Builds one page: icon, title, message and the tips card.
     private func pageView(_ item: OnboardingPage) -> some View {
         ScrollView {
             VStack(spacing: 18) {
@@ -189,6 +213,7 @@ struct OnboardingView: View {
         }
     }
 
+    /// Custom dots instead of the built in indicator (hidden with indexDisplayMode .never) so they can be made accessible and adjustable.
     private var pageDots: some View {
         HStack(spacing: 8) {
             ForEach(pages.indices, id: \.self) { index in
@@ -204,6 +229,7 @@ struct OnboardingView: View {
             switch direction {
             case .increment: if page < pages.count - 1 { page += 1 }
             case .decrement: if page > 0 { page -= 1 }
+            // Required for future cases of the direction enum.
             @unknown default: break
             }
         }
@@ -211,19 +237,23 @@ struct OnboardingView: View {
 }
 
 /// Shows the tour once per account, the first time that account reaches the main app.
+/// Decides whether to show the tour for the current user. @State holds whether the cover is showing.
 private struct OnboardingGate: ViewModifier {
     let userID: String?
     @State private var isShowing = false
 
     func body(content: Content) -> some View {
         content
+            // Full screen cover so the tour sits above the whole app.
             .fullScreenCover(isPresented: $isShowing) {
                 OnboardingView {
                     if let userID { OnboardingStore.markSeen(userID) }
                     isShowing = false
                 }
+                // Stops swipe-down dismissal, so the tour only ends through Skip or Get started and the seen flag is set.
                 .interactiveDismissDisabled()
             }
+            // initial: true also runs on first appearance, not only when the ID later changes (for example sign in as another user).
             .onChange(of: userID, initial: true) { _, newID in
                 if let newID, !OnboardingStore.hasSeen(newID) {
                     isShowing = true
@@ -232,8 +262,10 @@ private struct OnboardingGate: ViewModifier {
     }
 }
 
+/// Adds .onboarding(for: userID) to attach the tour to a view.
 extension View {
     func onboarding(for userID: String?) -> some View {
         modifier(OnboardingGate(userID: userID))
     }
 }
+

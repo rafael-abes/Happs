@@ -5,14 +5,26 @@
 //  Created by Rafa Abes on 10/11/26.
 //
 
+// CODE OVERVIEW
+// The notifications inbox, shown as a sheet from the Me tab (ProfileView). It lists notifications
+// kept by NotificationStore (a Firestore snapshot listener feeds it, so new items appear live),
+// lets the user search them, mark one or all as read, and swipe to delete.
+// Each row also has a speaker button (SpeakButton, text to speech) and the search box has a mic
+// (VoiceSearchField, speech to text), both from Components/STT_TTS. The filtering is done locally
+// on the already loaded array, so no extra Firestore query is needed.
 import SwiftUI
 
+/// Inbox sheet listing the user's notifications with search, read and delete actions.
 struct NotificationsView: View {
+    // Source of notifications and of read and delete operations.
     @EnvironmentObject private var notificationStore: NotificationStore
+    // Closes the sheet.
     @Environment(\.dismiss) private var dismiss
 
+    // Search text, also written by voice input.
     @State private var query = ""
 
+    /// Notifications matching the search text in title or body (case insensitive), or all of them when the box is empty.
     private var filtered: [AppNotification] {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !text.isEmpty else { return notificationStore.notifications }
@@ -22,7 +34,9 @@ struct NotificationsView: View {
     }
 
     var body: some View {
+        // Own NavigationStack because this is presented as a sheet.
         NavigationStack {
+            // Group lets the if/else choose between an empty state and the list.
             Group {
                 if notificationStore.notifications.isEmpty {
                     ContentUnavailableView(
@@ -38,10 +52,12 @@ struct NotificationsView: View {
                         if filtered.isEmpty {
                             ContentUnavailableView.search(text: query)
                         } else {
+                            // swipe to delete; allowsFullSwipe lets a long swipe delete straight away.
                             List(filtered) { item in
                                 row(item)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                         Button(role: .destructive) {
+                                            // Store methods are async, so the synchronous button action wraps them in a Task.
                                             Task { await notificationStore.deleteNotification(item) }
                                         } label: {
                                             Label("Delete", systemImage: "trash")
@@ -136,3 +152,4 @@ struct NotificationsView: View {
         }
     }
 }
+

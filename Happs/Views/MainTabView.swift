@@ -4,17 +4,31 @@
 //
 //  Created by Rafa Abes on 10/1/26.
 //
+// CODE OVERVIEW
+// The root screen once the user is signed in (ContentView shows it). It is a custom tab bar
+// switching between Friends, Happs and Me, rather than SwiftUI's TabView.
+// A hand built bar gives full control over the icons (custom light and dark assets), the green
+// selected capsule and the unread badge (assumed reason for not using TabView). The cost is that
+// accessibility traits and sizing have to be added by hand, which this file does.
+// Only the selected tab's view is created at a time (a switch), so a tab's @State resets when
+// you leave it. The badge count comes from NotificationStore.unreadCount.
 import SwiftUI
 
+/// Signed in shell: the current tab's screen above a custom bottom tab bar.
 struct MainTabView: View {
+    // Source of the unread count shown as a badge on the Me tab.
     @EnvironmentObject private var notificationStore: NotificationStore
+    // Same key the app uses for the dark mode setting; here it only picks the light or dark icon variant.
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
+    // Icon size scales with Dynamic Type instead of staying fixed.
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 30
 
+    /// The three tabs.
     private enum Tab {
         case friends, happs, me
     }
 
+    // Starts on the Happs tab.
     @State private var selectedTab: Tab = .happs
 
     var body: some View {
@@ -22,6 +36,7 @@ struct MainTabView: View {
 
             // Main page
             Group {
+                // Only the active tab is built.
                 switch selectedTab {
                 case .friends:
                     FriendsListView()
@@ -40,6 +55,7 @@ struct MainTabView: View {
         }
     }
 
+    /// The bottom bar, built from three tabButton calls separated by spacers.
     private var tabBar: some View {
         HStack {
 
@@ -73,6 +89,7 @@ struct MainTabView: View {
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity)
         .background(.bar)
+        // Caps the bar's text growth (see the accessibility notes above); screen content is not capped.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
@@ -83,6 +100,7 @@ struct MainTabView: View {
         return "\(label), \(count) unread \(count == 1 ? "notification" : "notifications")"
     }
 
+    /// One tab button: icon (with badge on Me), label, selected styling and accessibility traits.
     private func tabButton(
         _ tab: Tab,
         imageName: String,
@@ -141,3 +159,4 @@ struct MainTabView: View {
     }
 
 }
+

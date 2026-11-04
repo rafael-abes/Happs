@@ -4,10 +4,19 @@
 //
 //  Created by Rafa Abes on 10/10/26.
 //
+// CODE OVERVIEW
+// The two annotation views drawn on the map: HappPin (category icon, title and going count) and
+// FriendPin (avatar with status ring and name). They are pure views driven by a model and an
+// isSelected flag; the parent map owns selection and the tap handling. Category and status are
+// drawn with shapes as well as colours, and each pin sets one spoken label built by
+// AccessibilityText.
 import SwiftUI
 
+/// Map annotation for a Happ: a capsule with icon, title and attendee count, and a small pointer triangle underneath.
 struct HappPin: View {
+    /// The Happ to draw.
     let happ: Happ
+    /// Selected pins are slightly enlarged with a thicker outline.
     let isSelected: Bool
 
     var body: some View {
@@ -40,6 +49,7 @@ struct HappPin: View {
                 .foregroundStyle(happ.category.tint)
                 .offset(y: -2)
         }
+        // anchor .bottom makes the pin grow upwards from its tip, so the tip stays on the coordinate.
         .scaleEffect(isSelected ? 1.15 : 1, anchor: .bottom)
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
         .accessibilityElement(children: .ignore)
@@ -54,8 +64,11 @@ struct HappPin: View {
     }
 }
 
+/// Map annotation for a friend: avatar with a status ring and badge, and the name underneath.
 struct FriendPin: View {
+    /// The friend to draw.
     let friend: UserProfile
+    /// Selected pins are slightly enlarged.
     let isSelected: Bool
 
     var body: some View {

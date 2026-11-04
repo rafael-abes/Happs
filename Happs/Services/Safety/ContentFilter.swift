@@ -5,11 +5,18 @@
 //  Created by Rafa Abes on 11/2/26.
 //
 
-
+// CODE OVERVIEW
+// A pure, on-device profanity and threat filter in a caseless enum, with no state or network. Views
+// and stores call check/validate before saving text, and displayText when showing other people's
+// text. Being pure means the rules can be unit tested exhaustively. The matching is a pipeline:
+// tokenise (lowercase, strip accents, map look-alike characters, collapse repeated letters), then
+// compare against phrases, whole-word terms and substring terms, then check spaced-out letters.
+// Two term lists exist so short words are not matched inside innocent words (see the header above).
+//
 import Foundation
 
 nonisolated enum ContentFilter {
-
+    /// Result of a check: allowed, or blocked with a broad category (for example "profanity").
     enum Verdict: Equatable {
         case allowed
         case blocked(category: String)

@@ -5,18 +5,33 @@
 //  Created by Rafa Abes on 10/23/26.
 //
 
+// CODE OVERVIEW
+// Static "About" screen pushed from the Me tab (ProfileView.isShowingAbout). It shows the app
+// description, the developer details, the app version read from the bundle, and a list of
+// acknowledgements (third-party libraries and services). It holds no shared state and talks to no
+// store or service. The credits are plain data (an array of a private struct) rendered with
+// ForEach, so adding a credit is one new array entry and no new view code. It can also present
+// OnboardingView in a sheet so the welcome tour can be replayed.
+//
 import SwiftUI
 
+/// One acknowledgement row. Private because only AboutView uses it. Identifiable (a fresh UUID per
+/// instance) so ForEach can track rows; the UUID is not stable across launches, which is fine for a
+/// static list.
 private struct Credit: Identifiable {
     let id = UUID()
     let name: String
     let detail: String
+    // nil means there is nothing to open (see the teaching-materials credit), so no Link is drawn.
     let url: URL?
 }
 
+/// The About screen. A List gives free scrolling, grouped sections and Dynamic Type support.
 struct AboutView: View {
+    /// Drives the sheet that replays the onboarding tour.
     @State private var showsTour = false
 
+    /// Hard-coded acknowledgements. A constant array (not state) because it never changes at runtime.
     private let credits: [Credit] = [
         Credit(
             name: "Firebase iOS SDK",
@@ -65,6 +80,8 @@ struct AboutView: View {
         ),
     ]
 
+    /// Marketing version and build number from Info.plist, for example "1.0 (1)". The fallbacks
+    /// ("1.0" and "1") are used if a key is missing, so the label is never empty.
     private var versionText: String {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -72,6 +89,7 @@ struct AboutView: View {
         return "\(version) (\(build))"
     }
 
+    // A List of sections: header, description, tour replay, developer details, credits.
     var body: some View {
         List {
             header
@@ -109,10 +127,13 @@ struct AboutView: View {
         .navigationTitle("About")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showsTour) {
+            // OnboardingView takes a completion closure; here it just closes the sheet again.
             OnboardingView { showsTour = false }
         }
     }
 
+    /// App icon, name and version. Wrapped in a Section so it sits inside the List, with the row
+    /// background cleared so it looks like a title block rather than a table cell.
     private var header: some View {
         Section {
             VStack(spacing: 6) {
@@ -132,6 +153,9 @@ struct AboutView: View {
         }
     }
 
+    /// One credit row. Rows with a URL become a Link (opens in the browser); rows without one are
+    /// plain text. @ViewBuilder lets the if/else return different view types.
+    /// - Parameter credit: the credit to render.
     @ViewBuilder
     private func creditRow(_ credit: Credit) -> some View {
         if let url = credit.url {
@@ -149,6 +173,7 @@ struct AboutView: View {
         }
     }
 
+    /// The shared visual content (name over detail) used by both the Link and plain variants.
     private func creditText(_ credit: Credit) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(credit.name)
@@ -162,4 +187,5 @@ struct AboutView: View {
         .frame(minHeight: 44, alignment: .leading)
     }
 }
+
 

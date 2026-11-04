@@ -4,24 +4,44 @@
 //
 //  Created by Rafa Abes on 10/2/26.
 //
+// CODE OVERVIEW
+// The Friends tab. Shows the friends list (with incoming requests and a link to Groups) and can
+// switch to the campus map (FriendsMapView) with a toolbar toggle. It is a View only: friend data
+// comes from FriendStore, group counts from GroupStore, and blocking goes through SafetyStore, all
+// injected with @EnvironmentObject. The stores keep Firestore snapshot listeners running, so this
+// view updates by itself whenever a friend, request or invitation changes.
+// Design: destructive actions (remove, block) are always confirmed with a dialog, and each row
+// offers the same actions as swipe, context menu and VoiceOver custom action. Pending choices
+// are held in optional @State values (friendPendingRemoval, blockCandidate) that drive the dialogs.
 import SwiftUI
 import FirebaseAuth
 
+/// Friends tab root: list or map of friends, plus requests, groups link, add friend sheet, report and block flows.
 struct FriendsListView: View {
+    // App wide stores injected at the root. The views read them; they do not own the data.
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var friendStore: FriendStore
     @EnvironmentObject private var groupStore: GroupStore
+    // Used to stack row content vertically at accessibility text sizes.
     @Environment(\.dynamicTypeSize) private var typeSize
     
+    // Drives the Add Friends sheet.
     @State private var isPresentingAddFriends = false
+    // false shows the list, true shows the map. Plain @State because it is a purely local view choice.
     @State private var showsMap = false
+    // Friend the user has asked to remove; non nil shows the confirmation dialog.
     @State private var friendPendingRemoval: UserProfile?
+    // Used to block users and to hide reported content.
     @EnvironmentObject private var safetyStore: SafetyStore
+    // Non nil presents ReportSheet for this target.
     @State private var reportTarget: ReportTarget?
+    // Tuple of the user's id and name awaiting block confirmation. Non nil shows the block dialog.
     @State private var blockCandidate: (id: String, name: String)?
     
     var body: some View {
+        // Own NavigationStack for this tab, so pushes (Groups) stay inside the Friends tab.
         NavigationStack {
+            // Group lets the if/else swap the whole content between list and map without extra containers.
             Group {
                 if showsMap {
                     FriendsMapView()
@@ -43,13 +63,18 @@ struct FriendsListView: View {
                         .accessibilityHint("Opens a search to find and add friends.")
                 }
             }
+            // Sheet presented by a Bool flag.
             .sheet(isPresented: $isPresentingAddFriends) { AddFriendsView() }
+            // .sheet(item:) needs an Identifiable value, but reportTarget is optional and not Identifiable.
+            // This Binding wraps it in a FriendReportItem on read and clears reportTarget when the sheet closes.
             .sheet(item: Binding(
                 get: { reportTarget.map { FriendReportItem(target: $0) } },
                 set: { if $0 == nil { reportTarget = nil } }
             )) { item in
                 ReportSheet(target: item.target)
             }
+            // Block confirmation. The Binding is built inline: presented when blockCandidate is set,
+            // and dismissing clears it.
             .confirmationDialog(
                 "Block this person?",
                 isPresented: Binding(get: { blockCandidate != nil }, set: { if !$0 { blockCandidate = nil } }),
@@ -62,6 +87,7 @@ struct FriendsListView: View {
             } message: {
                 Text("They won't be able to see you on the map, and you won't see their Happs or photos. You can unblock them in Me > Privacy and Safety.")
             }
+            // Remove confirmation. `presenting:` hands the pending friend to the button and message closures.
             .confirmationDialog(
                 "Remove friend?",
                 isPresented: removalIsPresented,
@@ -73,6 +99,7 @@ struct FriendsListView: View {
             } message: { _ in
                 Text("You'll stop seeing each other's status and location. You can send a new request later.")
             }
+            // Errors are published by FriendStore itself (errorMessage); the alert clears them through clearError().
             .alert("Database Error", isPresented: errorIsPresented) {
                 Button("OK", role: .cancel) { friendStore.clearError() }
             } message: {
@@ -81,6 +108,7 @@ struct FriendsListView: View {
         }
     }
     
+    /// The list body: Groups link, incoming requests (only when there are some) and the friends.
     private var friendsList: some View {
         List {
             Section {
@@ -113,6 +141,7 @@ struct FriendsListView: View {
         }
     }
     
+    /// Groups navigation row showing the group count, or a red "N new" badge when invitations are waiting.
     private var groupsRow: some View {
         HStack {
             Label("Groups", systemImage: "person.3.fill")
@@ -129,6 +158,7 @@ struct FriendsListView: View {
                     .background(Color.happsRedFill, in: Capsule())
             }
         }
+        // Merge the row into one VoiceOver element and read a single sentence built by AccessibilityText.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             AccessibilityText.groupsRow(
@@ -138,8 +168,12 @@ struct FriendsListView: View {
         )
     }
     
+    /// One friend row. Visible friends show their status colour ring and symbol; hidden ones show "Hidden".
+    /// Remove, Block and Report are offered as swipe, context menu and VoiceOver actions so none is touch only.
     private func friendRow(_ friend: UserProfile) -> some View {
+        // Online on campus is decided by the store (visible, flagged on campus and a recent lastSeenAt).
         let onCampus = friendStore.isOnlineOnCampus(friend)
+        // AnyLayout swaps HStack and VStack without rebuilding the children.
         let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout())
         return layout {
             HStack {
@@ -174,6 +208,7 @@ struct FriendsListView: View {
         .accessibilityAction(named: "Remove \(friend.displayName)") { friendPendingRemoval = friend }
         .accessibilityAction(named: "Block \(friend.displayName)") { blockCandidate = (friend.id, friend.displayName) }
         .accessibilityAction(named: "Report \(friend.displayName)") { report(friend) }
+        // allowsFullSwipe false stops a long swipe from removing a friend by accident.
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button("Remove", role: .destructive) { friendPendingRemoval = friend }
         }
@@ -183,6 +218,7 @@ struct FriendsListView: View {
         }
     }
     
+    /// One incoming friend request, with accept and decline (ResponseRow) and a Block action.
     private func requestRow(_ request: FriendRequest) -> some View {
         ResponseRow(
             title: request.fromDisplayName,
@@ -200,14 +236,17 @@ struct FriendsListView: View {
         }
     }
     
+    /// Bool binding for the removal dialog derived from the optional friendPendingRemoval.
     private var removalIsPresented: Binding<Bool> {
         Binding(get: { friendPendingRemoval != nil }, set: { if !$0 { friendPendingRemoval = nil } })
     }
     
+    /// Bool binding for the error alert derived from FriendStore's errorMessage.
     private var errorIsPresented: Binding<Bool> {
         Binding(get: { friendStore.errorMessage != nil }, set: { if !$0 { friendStore.clearError() } })
     }
     
+    /// Right hand status text: "Hidden" when the friend turned visibility off, otherwise status name and symbol.
     @ViewBuilder
     private func statusLabel(for friend: UserProfile) -> some View {
         if friend.isVisible == false {
@@ -219,6 +258,7 @@ struct FriendsListView: View {
         }
     }
     
+    /// Accepts or declines a request. try? ignores errors here (assumed reason: FriendStore also publishes its own errorMessage, which the alert shows).
     private func respond(_ request: FriendRequest, accept: Bool) {
         Task {
             if accept { try? await friendStore.acceptRequest(request) }
@@ -226,6 +266,7 @@ struct FriendsListView: View {
         }
     }
     
+    /// Builds the ReportTarget for a friend's profile and so opens the report sheet.
     private func report(_ friend: UserProfile) {
         reportTarget = ReportTarget(
             kind: .profile, targetID: friend.id, happID: nil,
@@ -234,6 +275,7 @@ struct FriendsListView: View {
         )
     }
     
+    /// Blocks a user through SafetyStore (which also removes the friendship) and announces it to VoiceOver.
     private func block(_ id: String, _ name: String) {
         guard let userID = authService.user?.uid else { return }
         Task {
@@ -242,12 +284,14 @@ struct FriendsListView: View {
         }
     }
     
+    /// Removes a friend after the user confirmed in the dialog.
     private func remove(_ friend: UserProfile) {
         guard let userID = authService.user?.uid else { return }
         Task { await friendStore.removeFriend(friend.id, currentUserID: userID) }
     }
 }
 
+/// Identifiable wrapper so a ReportTarget can drive .sheet(item:). The id combines kind and target id.
 private struct FriendReportItem: Identifiable {
     let target: ReportTarget
     var id: String { target.kind.rawValue + target.targetID }
