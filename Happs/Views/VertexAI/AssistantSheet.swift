@@ -10,6 +10,7 @@
 //
 import SwiftUI
 import CoreLocation
+import FirebaseAuth
 
 /// "Describe it" sheet. The user types or dictates a sentence, reviews the draft,
 /// and taps "Use this". The editor form is filled but nothing is saved.

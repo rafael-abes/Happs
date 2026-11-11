@@ -14,6 +14,7 @@
 // into a local @State and writes changes straight back.
 //
 import SwiftUI
+import FirebaseAuth
 
 /// Privacy, safety and account links in one List.
 struct PrivacySafetyView: View {

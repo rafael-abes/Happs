@@ -14,6 +14,7 @@
 // sending and success so the same sheet can show either the form or a confirmation.
 //
 import SwiftUI
+import FirebaseAuth
 
 /// The report form. Shows a thank-you state after a successful send.
 struct ReportSheet: View {

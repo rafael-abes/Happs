@@ -16,6 +16,7 @@
 // this screen shares the same instances as the rest of the app.
 //
 import SwiftUI
+import FirebaseAuth
 
 /// Form that walks the user through confirming and then deleting their account.
 struct DeleteAccountView: View {

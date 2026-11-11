@@ -13,6 +13,7 @@
 // user id. A spoken announcement confirms the action because the row disappears afterwards.
 //
 import SwiftUI
+import FirebaseAuth
 
 /// The Blocked People screen (a List with an empty state).
 struct BlockedUsersView: View {
