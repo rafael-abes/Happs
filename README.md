@@ -116,7 +116,3 @@ See `SAFETY_AND_PRIVACY.md` for what is enforced in the app, what needs server r
 ## Acknowledgements
 
 Firebase, Google Gemini, Supabase, Ticketmaster Discovery API, GoogleSignIn, Apple frameworks (SwiftUI, MapKit, CoreLocation, Speech, AVFoundation).
-
-## Licence
-
-Add a licence here, or state that the code is shared for academic purposes only.
